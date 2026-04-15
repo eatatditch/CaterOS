@@ -117,6 +117,16 @@ export async function createQuote(input: z.infer<typeof createSchema>) {
   const { error: itemsErr } = await supabase.from('quote_items').insert(itemsPayload);
   if (itemsErr) return { error: itemsErr.message };
 
+  // Sync the linked deal's expected value so the pipeline shows the quote total.
+  if (parsed.data.deal_id) {
+    await supabase
+      .from('deals')
+      .update({ amount_cents: totals.totalCents, currency: ctx.org.currency })
+      .eq('id', parsed.data.deal_id);
+    revalidatePath('/app/pipeline');
+    revalidatePath(`/app/deals/${parsed.data.deal_id}`);
+  }
+
   revalidatePath('/app/quotes');
   redirect(`/app/quotes/${quote.id}`);
 }
@@ -249,12 +259,14 @@ export async function sendQuote(input: z.infer<typeof sendSchema>) {
         .eq('pipeline_id', dealRow.pipeline_id)
         .eq('name', 'Quote Sent')
         .maybeSingle();
+      const patch: Record<string, unknown> = {
+        amount_cents: quote.total_cents,
+        currency: quote.currency,
+      };
       if (quoteSentStage && quoteSentStage.id !== dealRow.stage_id) {
-        await admin
-          .from('deals')
-          .update({ stage_id: quoteSentStage.id })
-          .eq('id', quote.deal_id);
+        patch.stage_id = quoteSentStage.id;
       }
+      await admin.from('deals').update(patch).eq('id', quote.deal_id);
     }
   }
 
