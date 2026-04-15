@@ -1,5 +1,6 @@
 import { requireCurrent } from '@/lib/auth/current';
 import { PageHeader } from '@/components/ui/page-header';
+import { SquarespaceInstall } from './squarespace-install';
 import { EmbedSnippet } from './embed-snippet';
 
 export default async function FormsPage() {
@@ -7,29 +8,37 @@ export default async function FormsPage() {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-  const endpoint = `${appUrl}/api/public/leads/${ctx.org.slug}`;
 
   return (
     <div className="container max-w-4xl py-8">
       <PageHeader
         title="Web forms"
-        description="Drop a form on any website. Submissions create a contact and a deal in your Lead stage, auto-assigned to a catering manager."
+        description="Drop a lead-capture form on any website. Submissions create a deal in your pipeline auto-assigned to a catering manager."
       />
 
-      <div className="mb-6 rounded-lg border bg-card p-6">
-        <h2 className="mb-2 font-semibold">Your endpoint</h2>
-        <p className="mb-3 text-sm text-muted-foreground">
-          This is a public POST endpoint. Any site can submit to it.
+      <SquarespaceInstall appUrl={appUrl} orgSlug={ctx.org.slug} orgName={ctx.org.name} />
+
+      <div className="mt-10">
+        <h2 className="mb-1 text-lg font-semibold">More options</h2>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Standalone HTML and raw fetch examples for anywhere else.
         </p>
-        <code className="block overflow-x-auto rounded bg-muted px-3 py-2 text-xs">
-          POST {endpoint}
-        </code>
+        <EmbedSnippet
+          endpoint={`${appUrl}/api/public/leads/${ctx.org.slug}`}
+          orgName={ctx.org.name}
+        />
       </div>
 
-      <EmbedSnippet endpoint={endpoint} orgName={ctx.org.name} />
-
       <div className="mt-6 rounded-lg border bg-card p-6">
-        <h2 className="mb-2 font-semibold">JSON fields</h2>
+        <h2 className="mb-2 font-semibold">Raw API</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Build your own UI and POST JSON. CORS is enabled.
+        </p>
+        <code className="block overflow-x-auto rounded bg-muted px-3 py-2 text-xs">
+          POST {appUrl}/api/public/leads/{ctx.org.slug}
+        </code>
+
+        <h3 className="mb-2 mt-4 text-sm font-semibold">JSON fields</h3>
         <table className="w-full text-sm">
           <thead className="border-b text-left text-muted-foreground">
             <tr>
@@ -45,10 +54,10 @@ export default async function FormsPage() {
               ['email', 'string (email)', 'yes'],
               ['phone', 'string', 'no'],
               ['company', 'string', 'no'],
-              ['event_date', 'ISO 8601', 'no'],
+              ['event_date', 'ISO date (YYYY-MM-DD)', 'no'],
               ['headcount', 'integer', 'no'],
               ['message', 'string', 'no'],
-              ['source', 'string', 'no (defaults to web_form)'],
+              ['source', 'string', 'no — defaults to web_form'],
             ].map(([f, t, r]) => (
               <tr key={f}>
                 <td className="py-2 pr-4 font-mono text-xs">{f}</td>
