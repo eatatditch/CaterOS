@@ -9,6 +9,7 @@ import { DealForm } from '../deal-form';
 import { ActivityTimeline } from '@/components/activity-timeline';
 import { NewActivityForm } from '@/components/new-activity-form';
 import { ContactEmailPanel } from '@/components/contact-email-panel';
+import { DealHeaderActions } from './deal-header-actions';
 
 export default async function DealDetailPage({
   params,
@@ -63,14 +64,7 @@ export default async function DealDetailPage({
       <PageHeader
         title={deal.title}
         description={`${(deal.stages as unknown as { name: string } | null)?.name ?? ''} · ${formatMoney(deal.amount_cents, deal.currency)}`}
-        actions={
-          <Link
-            href={`/app/quotes/new?deal=${deal.id}`}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Create quote from this
-          </Link>
-        }
+        actions={<DealHeaderActions dealId={deal.id} dealTitle={deal.title} />}
       />
 
       <div className="grid gap-6 lg:grid-cols-3">

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { tryCreateAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
 
 const schema = z.object({
@@ -76,5 +77,58 @@ export async function updateDeal(id: string, formData: FormData) {
   if (error) return { error: error.message };
   revalidatePath('/app/pipeline');
   revalidatePath(`/app/deals/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Remove a deal from the pipeline entirely. Cascades: activities linked to the
+ * deal are removed (FK on delete cascade); quotes keep their row but have
+ * deal_id nulled out (set null) so historical quote records aren't lost.
+ *
+ * Guard: if there's a linked invoice with any payment recorded, we refuse —
+ * the admin should refund the Stripe charge first.
+ */
+export async function deleteDeal(id: string) {
+  const ctx = await requireCurrent();
+  const supabase = await createClient();
+  const admin = tryCreateAdminClient();
+  const client = admin ?? supabase;
+
+  // Find all quotes tied to this deal, then check their invoices for payments
+  const { data: quoteRows } = await client
+    .from('quotes')
+    .select('id, number')
+    .eq('deal_id', id);
+
+  const quoteIds = (quoteRows ?? []).map((q) => q.id);
+  if (quoteIds.length > 0) {
+    const { data: invoices } = await client
+      .from('invoices')
+      .select('number, amount_paid_cents')
+      .in('quote_id', quoteIds);
+    for (const inv of invoices ?? []) {
+      if ((inv.amount_paid_cents ?? 0) > 0) {
+        return {
+          error: `Can't remove — invoice ${inv.number} has a payment recorded. Refund it in Stripe first.`,
+        };
+      }
+    }
+  }
+
+  const { error } = await supabase.from('deals').delete().eq('id', id);
+  if (error) return { error: error.message };
+
+  if (admin) {
+    await admin.from('audit_logs').insert({
+      org_id: ctx.org.id,
+      actor_id: ctx.user.id,
+      action: 'delete',
+      entity: 'deal',
+      entity_id: id,
+    });
+  }
+
+  revalidatePath('/app/pipeline');
+  revalidatePath('/app/contacts');
   return { ok: true };
 }
