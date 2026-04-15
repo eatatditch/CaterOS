@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from 'react';
 import { Check, Copy, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { saveWebFormSettings, type WebFormSettings } from '@/lib/actions/web-form';
+import { saveWebFormSettings } from '@/lib/actions/web-form';
+import type { WebFormSettings } from '@/lib/types/web-form';
 
 type FieldKey =
   | 'last_name'

@@ -4,44 +4,19 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
-
-const FIELD_KEYS = [
-  'last_name',
-  'phone',
-  'company',
-  'event_date',
-  'event_time',
-  'service_type',
-  'location',
-  'guest_count',
-  'message',
-] as const;
-
-export type WebFormSettings = {
-  method: 'iframe' | 'script';
-  accent: string;
-  button_text: string;
-  thanks_text: string;
-  enabled_fields: string[];
-  required_fields: string[];
-};
-
-export const DEFAULT_WEB_FORM_SETTINGS: WebFormSettings = {
-  method: 'iframe',
-  accent: '#ea580c',
-  button_text: 'Request a quote',
-  thanks_text: "Thanks! We'll be in touch shortly.",
-  enabled_fields: [...FIELD_KEYS],
-  required_fields: [],
-};
+import {
+  DEFAULT_WEB_FORM_SETTINGS,
+  WEB_FORM_FIELD_KEYS,
+  type WebFormSettings,
+} from '@/lib/types/web-form';
 
 const schema = z.object({
   method: z.enum(['iframe', 'script']),
   accent: z.string().regex(/^#[0-9a-f]{3,8}$/i, 'Invalid color'),
   button_text: z.string().min(1).max(80),
   thanks_text: z.string().min(1).max(200),
-  enabled_fields: z.array(z.enum(FIELD_KEYS)),
-  required_fields: z.array(z.enum(FIELD_KEYS)),
+  enabled_fields: z.array(z.enum(WEB_FORM_FIELD_KEYS)),
+  required_fields: z.array(z.enum(WEB_FORM_FIELD_KEYS)),
 });
 
 export async function getWebFormSettings(): Promise<WebFormSettings> {
@@ -57,10 +32,7 @@ export async function getWebFormSettings(): Promise<WebFormSettings> {
     | Partial<WebFormSettings>
     | undefined;
 
-  return {
-    ...DEFAULT_WEB_FORM_SETTINGS,
-    ...(stored ?? {}),
-  };
+  return { ...DEFAULT_WEB_FORM_SETTINGS, ...(stored ?? {}) };
 }
 
 export async function saveWebFormSettings(input: WebFormSettings) {
