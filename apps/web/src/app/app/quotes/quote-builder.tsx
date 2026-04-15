@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeQuoteTotals, formatMoney } from '@cateros/lib/money';
@@ -13,6 +13,54 @@ import {
   buttonPrimaryCls,
   buttonOutlineCls,
 } from '@/components/ui/field';
+
+/**
+ * Controlled numeric input that doesn't fight you while typing. Holds its
+ * own text state, only commits the parsed number to `onChange` on blur.
+ * Syncs back to external value changes only when the input is not focused.
+ */
+function NumericInput({
+  value,
+  onChange,
+  className,
+  ...rest
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  className?: string;
+  step?: string;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+  'aria-label'?: string;
+}) {
+  const valueToText = (n: number) => (isFinite(n) && n !== 0 ? String(n) : '');
+  const [text, setText] = useState(() => valueToText(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(valueToText(value));
+  }, [value, focused]);
+
+  return (
+    <input
+      {...rest}
+      type="number"
+      inputMode="decimal"
+      value={text}
+      className={className}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false);
+        const n = parseFloat(text);
+        const next = isFinite(n) && n >= 0 ? n : 0;
+        onChange(next);
+        setText(valueToText(next));
+      }}
+    />
+  );
+}
 
 type MenuItem = {
   id: string;
@@ -219,12 +267,10 @@ export function QuoteBuilder({
               />
             </Field>
             <Field label="Guest count" htmlFor="headcount">
-              <input
-                id="headcount"
-                type="number"
+              <NumericInput
                 min="0"
                 value={headcount}
-                onChange={(e) => setHeadcount(Number(e.target.value))}
+                onChange={(n) => setHeadcount(Math.max(0, Math.floor(n)))}
                 className={inputCls}
               />
             </Field>
@@ -328,28 +374,27 @@ export function QuoteBuilder({
                       className={`${inputCls} mt-2 h-8 text-xs`}
                     />
                   </div>
-                  <input
-                    type="number"
+                  <NumericInput
                     min="1"
                     value={it.quantity}
-                    onChange={(e) =>
-                      updateItem(it.key, { quantity: Number(e.target.value) || 1 })
+                    onChange={(n) =>
+                      updateItem(it.key, { quantity: Math.max(1, Math.floor(n) || 1) })
                     }
                     className={`${inputCls} h-9`}
                     aria-label="Quantity"
                   />
-                  <input
-                    type="number"
+                  <NumericInput
                     min="0"
                     step="0.01"
-                    value={(it.unit_price_cents / 100).toFixed(2)}
-                    onChange={(e) =>
+                    value={it.unit_price_cents / 100}
+                    onChange={(dollars) =>
                       updateItem(it.key, {
-                        unit_price_cents: Math.round(Number(e.target.value) * 100),
+                        unit_price_cents: Math.round(dollars * 100),
                       })
                     }
                     className={`${inputCls} h-9`}
                     aria-label="Unit price"
+                    placeholder="0.00"
                   />
                   <div className="px-2 py-2 text-right text-sm font-medium">
                     {formatMoney(it.quantity * it.unit_price_cents, currency)}
@@ -372,60 +417,50 @@ export function QuoteBuilder({
           <h2 className="mb-4 font-semibold">Fees & taxes</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Tax rate (%)" htmlFor="tax">
-              <input
-                id="tax"
-                type="number"
+              <NumericInput
                 step="0.001"
                 min="0"
                 max="100"
-                value={(taxRate * 100).toFixed(3)}
-                onChange={(e) => setTaxRate((Number(e.target.value) || 0) / 100)}
+                value={taxRate * 100}
+                onChange={(pct) => setTaxRate(pct / 100)}
                 className={inputCls}
               />
             </Field>
             <Field label="Service fee (%)" htmlFor="svc">
-              <input
-                id="svc"
-                type="number"
+              <NumericInput
                 step="0.01"
                 min="0"
                 max="100"
-                value={(serviceFeeRate * 100).toFixed(2)}
-                onChange={(e) => setServiceFeeRate((Number(e.target.value) || 0) / 100)}
+                value={serviceFeeRate * 100}
+                onChange={(pct) => setServiceFeeRate(pct / 100)}
                 className={inputCls}
               />
             </Field>
             <Field label="Delivery fee ($)" htmlFor="delivery">
-              <input
-                id="delivery"
-                type="number"
+              <NumericInput
                 step="0.01"
                 min="0"
                 value={deliveryFee}
-                onChange={(e) => setDeliveryFee(Number(e.target.value) || 0)}
+                onChange={setDeliveryFee}
                 className={inputCls}
               />
             </Field>
             <Field label="Gratuity (%)" htmlFor="gratuity">
-              <input
-                id="gratuity"
-                type="number"
+              <NumericInput
                 step="0.01"
                 min="0"
                 max="100"
-                value={(gratuityRate * 100).toFixed(2)}
-                onChange={(e) => setGratuityRate((Number(e.target.value) || 0) / 100)}
+                value={gratuityRate * 100}
+                onChange={(pct) => setGratuityRate(pct / 100)}
                 className={inputCls}
               />
             </Field>
             <Field label="Discount ($)" htmlFor="discount">
-              <input
-                id="discount"
-                type="number"
+              <NumericInput
                 step="0.01"
                 min="0"
                 value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                onChange={setDiscount}
                 className={inputCls}
               />
             </Field>
