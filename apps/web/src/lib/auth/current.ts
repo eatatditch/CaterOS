@@ -11,12 +11,6 @@ export type CurrentContext = {
 };
 
 export const getCurrent = cache(async (): Promise<CurrentContext | null> => {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    throw new Error(
-      'Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel Project Settings → Environment Variables, then redeploy.',
-    );
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
