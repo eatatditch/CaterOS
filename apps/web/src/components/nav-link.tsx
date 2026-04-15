@@ -2,17 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function NavLink({
   href,
   label,
-  icon: Icon,
+  icon,
 }: {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: React.ReactNode;
 }) {
   const pathname = usePathname();
   const isActive = pathname === href || pathname.startsWith(href + '/');
@@ -26,7 +25,7 @@ export function NavLink({
           : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
       )}
     >
-      <Icon className="h-4 w-4" />
+      {icon}
       {label}
     </Link>
   );

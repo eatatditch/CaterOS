@@ -47,8 +47,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {nav.map(({ href, label, icon }) => (
-            <NavLink key={href} href={href} label={label} icon={icon} />
+          {nav.map(({ href, label, icon: Icon }) => (
+            <NavLink
+              key={href}
+              href={href}
+              label={label}
+              icon={<Icon className="h-4 w-4" />}
+            />
           ))}
         </nav>
         <div className="border-t p-4 text-xs">
