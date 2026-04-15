@@ -100,7 +100,7 @@ export function SquarespaceInstall({
     return [
       `<!-- ${orgName} — catering request form -->`,
       `<div ${attrs.join('\n     ')}></div>`,
-      `<script src="${appUrl}/widget.js" async></script>`,
+      `<script src="${appUrl}/widget.js"></script>`,
     ].join('\n');
   }, [orgSlug, orgName, appUrl, accent, buttonText, thanksText, enabledKeys, requiredKeys]);
 
