@@ -4,7 +4,8 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Paperclip, Send, X, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { sendContactEmail, uploadAttachment, type AttachmentRef } from '@/lib/actions/gmail';
+import { sendContactEmail, registerAttachment, type AttachmentRef } from '@/lib/actions/gmail';
+import { createClient } from '@/lib/supabase/client';
 import { Field, inputCls, buttonPrimaryCls } from '@/components/ui/field';
 import { RichEditor } from './rich-editor';
 
@@ -18,11 +19,13 @@ type ReplyContext = {
 export function EmailComposer({
   contactId,
   to,
+  orgId,
   replyTo,
   onSent,
 }: {
   contactId: string;
   to: string;
+  orgId: string;
   replyTo?: ReplyContext;
   onSent?: () => void;
 }) {
@@ -39,24 +42,42 @@ export function EmailComposer({
   async function onPickFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
+    const supabase = createClient();
     try {
       for (const file of Array.from(files)) {
         if (file.size > 25 * 1024 * 1024) {
           toast.error(`"${file.name}" is over 25 MB`);
           continue;
         }
-        const b64 = await fileToBase64(file);
-        const res = await uploadAttachment({
+
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+
+        // Upload binary directly to Supabase Storage (bypasses Next server
+        // action body-size limit of 1 MB; handles files up to 25 MB).
+        const { error: uploadErr } = await supabase.storage
+          .from('email-attachments')
+          .upload(storagePath, file, {
+            contentType: file.type || 'application/octet-stream',
+            upsert: false,
+          });
+        if (uploadErr) {
+          toast.error(`Upload failed for ${file.name}: ${uploadErr.message}`);
+          continue;
+        }
+
+        // Register metadata on the server for the send flow
+        const res = await registerAttachment({
+          storage_path: storagePath,
           filename: file.name,
           content_type: file.type || null,
           size: file.size,
-          data_base64: b64,
         });
-        if (res.error) {
-          toast.error(`Upload failed for ${file.name}: ${res.error}`);
+        if ('error' in res && res.error) {
+          toast.error(`Couldn't register ${file.name}: ${res.error}`);
           continue;
         }
-        if (res.attachment) {
+        if ('attachment' in res && res.attachment) {
           setAttachments((prev) => [...prev, res.attachment]);
         }
       }
@@ -190,18 +211,4 @@ export function EmailComposer({
       </div>
     </div>
   );
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // strip "data:*/*;base64," prefix
-      const comma = result.indexOf(',');
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }

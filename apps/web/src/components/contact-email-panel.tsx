@@ -71,6 +71,7 @@ export async function ContactEmailPanel({
           contactId={contactId}
           contactEmail={contactEmail}
           connectedInbox={connection.email}
+          orgId={ctx.org.id}
           messages={(messages ?? []) as StoredMessage[]}
         />
       </section>

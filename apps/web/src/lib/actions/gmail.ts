@@ -123,6 +123,65 @@ const uploadSchema = z.object({
   data_base64: z.string(),
 });
 
+const registerSchema = z.object({
+  storage_path: z.string().min(1).max(500),
+  filename: z.string().min(1).max(240),
+  content_type: z.string().max(120).optional().nullable(),
+  size: z.number().int().min(0).max(26214400),
+});
+
+/**
+ * Registers an attachment that was uploaded directly to Supabase Storage
+ * by the browser. Returns the attachment ref we use when sending.
+ * We verify the file exists at that path and belongs to this org before
+ * writing the metadata row.
+ */
+export async function registerAttachment(input: z.infer<typeof registerSchema>) {
+  const ctx = await requireCurrent();
+  const parsed = registerSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+
+  // Path must be scoped to this org (first folder segment)
+  const firstSeg = parsed.data.storage_path.split('/')[0];
+  if (firstSeg !== ctx.org.id) {
+    return { error: 'Attachment path not scoped to your org.' };
+  }
+
+  const admin = tryCreateAdminClient();
+  if (!admin) return { error: 'Missing SUPABASE_SERVICE_ROLE_KEY — contact your admin.' };
+
+  // Confirm the file exists in storage
+  const { error: headErr } = await admin.storage
+    .from('email-attachments')
+    .createSignedUrl(parsed.data.storage_path, 60);
+  if (headErr) return { error: `Upload not found: ${headErr.message}` };
+
+  const { data: row, error: rowErr } = await admin
+    .from('email_attachments')
+    .insert({
+      org_id: ctx.org.id,
+      storage_path: parsed.data.storage_path,
+      filename: parsed.data.filename,
+      content_type: parsed.data.content_type,
+      size_bytes: parsed.data.size,
+      uploaded_by: ctx.user.id,
+    })
+    .select('id, filename, content_type, storage_path')
+    .single();
+  if (rowErr) return { error: rowErr.message };
+
+  return {
+    ok: true,
+    attachment: {
+      id: row.id,
+      filename: row.filename,
+      content_type: row.content_type,
+      storage_path: row.storage_path,
+    },
+  };
+}
+
+/** @deprecated use registerAttachment + direct-to-storage client upload */
 export async function uploadAttachment(input: z.infer<typeof uploadSchema>) {
   const ctx = await requireCurrent();
   const parsed = uploadSchema.safeParse(input);

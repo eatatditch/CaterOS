@@ -34,11 +34,13 @@ export function EmailThreadPanel({
   contactId,
   contactEmail,
   connectedInbox,
+  orgId,
   messages,
 }: {
   contactId: string;
   contactEmail: string;
   connectedInbox: string;
+  orgId: string;
   messages: StoredMessage[];
 }) {
   const router = useRouter();
@@ -155,6 +157,7 @@ export function EmailThreadPanel({
           <EmailComposer
             contactId={contactId}
             to={contactEmail}
+            orgId={orgId}
             onSent={() => {
               setComposingNew(false);
               sync(true);
@@ -214,6 +217,7 @@ export function EmailThreadPanel({
                         <EmailComposer
                           contactId={contactId}
                           to={contactEmail}
+                          orgId={orgId}
                           replyTo={{
                             threadId: t.threadId,
                             inReplyTo: lastInbound?.gmail_message_id ?? null,
