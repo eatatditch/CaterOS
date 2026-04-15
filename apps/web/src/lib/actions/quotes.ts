@@ -147,6 +147,59 @@ export async function setQuoteStatus(
   return { ok: true };
 }
 
+/**
+ * Delete a quote. Cascades to quote_items (FK on delete cascade). If there's
+ * a linked invoice with ZERO payments, deletes that too. Blocks deletion if
+ * any payment has been recorded — the admin must refund from Stripe first.
+ */
+export async function deleteQuote(id: string) {
+  const ctx = await requireCurrent();
+  const supabase = await createClient();
+  const admin = tryCreateAdminClient();
+
+  // Is there an invoice linked to this quote? (use admin if available so we
+  // bypass RLS on payments for the check)
+  const client = admin ?? supabase;
+  const { data: invoices } = await client
+    .from('invoices')
+    .select('id, number, amount_paid_cents')
+    .eq('quote_id', id);
+
+  for (const inv of invoices ?? []) {
+    if ((inv.amount_paid_cents ?? 0) > 0) {
+      return {
+        error: `Can't delete — invoice ${inv.number} has a payment recorded. Refund it in Stripe first, then try again.`,
+      };
+    }
+  }
+
+  // Non-paid invoices: delete them + any payment attempts
+  if ((invoices ?? []).length > 0 && admin) {
+    const invoiceIds = invoices!.map((i) => i.id);
+    await admin.from('payments').delete().in('invoice_id', invoiceIds);
+    await admin.from('invoices').delete().in('id', invoiceIds);
+  }
+
+  // quote_items cascade via FK; deals stay (they may pre-date the quote)
+  const { error } = await supabase.from('quotes').delete().eq('id', id);
+  if (error) return { error: error.message };
+
+  // Log audit
+  if (admin) {
+    await admin.from('audit_logs').insert({
+      org_id: ctx.org.id,
+      actor_id: ctx.user.id,
+      action: 'delete',
+      entity: 'quote',
+      entity_id: id,
+    });
+  }
+
+  revalidatePath('/app/quotes');
+  revalidatePath('/app/pipeline');
+  return { ok: true };
+}
+
 const sendSchema = z.object({
   quote_id: z.string().uuid(),
   to: z.string().email(),

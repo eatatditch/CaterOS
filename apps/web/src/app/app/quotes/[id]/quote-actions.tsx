@@ -2,15 +2,16 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, ExternalLink, Send, X } from 'lucide-react';
+import { Copy, ExternalLink, Send, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { sendQuote, setQuoteStatus } from '@/lib/actions/quotes';
+import { deleteQuote, sendQuote, setQuoteStatus } from '@/lib/actions/quotes';
 import {
   Field,
   inputCls,
   textareaCls,
   buttonPrimaryCls,
   buttonOutlineCls,
+  buttonDestructiveCls,
 } from '@/components/ui/field';
 
 export function QuoteActions({
@@ -112,6 +113,31 @@ export function QuoteActions({
             </button>
           </>
         )}
+
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => {
+            const confirmed = confirm(
+              `Delete quote ${number}? This can't be undone. Linked invoices with no payments will also be deleted.`,
+            );
+            if (!confirmed) return;
+            startTransition(async () => {
+              const res = await deleteQuote(id);
+              if (res?.error) {
+                toast.error(res.error);
+              } else {
+                toast.success('Quote deleted');
+                router.push('/app/quotes');
+              }
+            });
+          }}
+          className={buttonDestructiveCls}
+          title="Delete quote"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </button>
       </div>
 
       {dialogOpen ? (
