@@ -22,12 +22,15 @@ const schema = z.object({
   email: z.string().trim().email(),
   phone: z.string().trim().max(40).optional().default(''),
   company: z.string().trim().max(160).optional().default(''),
-  event_date: z.string().optional().default(''),
+  event_date: z.string().trim().max(20).optional().default(''),
+  event_time: z.string().trim().max(10).optional().default(''),
+  service_type: z.string().trim().max(40).optional().default(''),
+  location_id: z.string().uuid().optional().nullable().or(z.literal('')),
   headcount: z.coerce.number().int().min(0).optional().default(0),
+  guest_count: z.coerce.number().int().min(0).optional().default(0),
   message: z.string().trim().max(4000).optional().default(''),
   source: z.string().trim().max(80).optional().default('web_form'),
-  // honeypot
-  website: z.string().optional().default(''),
+  website: z.string().optional().default(''), // honeypot
 });
 
 export async function POST(
@@ -36,7 +39,6 @@ export async function POST(
 ) {
   const { slug } = await params;
 
-  // Parse body (JSON or form-encoded)
   let raw: Record<string, unknown> = {};
   const contentType = request.headers.get('content-type') ?? '';
   try {
@@ -60,7 +62,7 @@ export async function POST(
     );
   }
 
-  // Honeypot — if filled, silently accept but don't create anything
+  // Honeypot
   if (parsed.data.website.length > 0) {
     return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
   }
@@ -74,7 +76,10 @@ export async function POST(
     p_phone: parsed.data.phone || null,
     p_company: parsed.data.company || null,
     p_event_date: parsed.data.event_date || null,
-    p_headcount: parsed.data.headcount,
+    p_event_time: parsed.data.event_time || null,
+    p_service_type: parsed.data.service_type || null,
+    p_location_id: parsed.data.location_id || null,
+    p_headcount: parsed.data.guest_count || parsed.data.headcount || 0,
     p_message: parsed.data.message || null,
     p_source: parsed.data.source,
   });
