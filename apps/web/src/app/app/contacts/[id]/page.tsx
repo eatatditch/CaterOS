@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { ContactForm } from '../contact-form';
 import { ActivityTimeline } from '@/components/activity-timeline';
 import { NewActivityForm } from '@/components/new-activity-form';
+import { ContactEmailPanel } from '@/components/contact-email-panel';
 
 export default async function ContactDetailPage({
   params,
@@ -60,6 +61,8 @@ export default async function ContactDetailPage({
             <h2 className="mb-4 font-semibold">Details</h2>
             <ContactForm initial={contact} companies={companies ?? []} />
           </section>
+
+          <ContactEmailPanel contactId={contact.id} contactEmail={contact.email} />
 
           <section className="rounded-lg border bg-card p-6">
             <h2 className="mb-4 font-semibold">Log an activity</h2>
