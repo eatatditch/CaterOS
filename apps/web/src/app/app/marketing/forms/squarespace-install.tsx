@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { useMemo, useState, useTransition } from 'react';
+import { Check, Copy, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { saveWebFormSettings, type WebFormSettings } from '@/lib/actions/web-form';
 
 type FieldKey =
   | 'last_name'
@@ -51,30 +52,44 @@ export function SquarespaceInstall({
   appUrl,
   orgSlug,
   orgName,
+  initialSettings,
+  canSave,
 }: {
   appUrl: string;
   orgSlug: string;
   orgName: string;
+  initialSettings: WebFormSettings;
+  canSave: boolean;
 }) {
-  const [method, setMethod] = useState<Method>('iframe');
-  const [accent, setAccent] = useState('#ea580c');
-  const [buttonText, setButtonText] = useState('Request a quote');
-  const [thanksText, setThanksText] = useState("Thanks! We'll be in touch shortly.");
+  const [method, setMethod] = useState<Method>(initialSettings.method);
+  const [accent, setAccent] = useState(initialSettings.accent);
+  const [buttonText, setButtonText] = useState(initialSettings.button_text);
+  const [thanksText, setThanksText] = useState(initialSettings.thanks_text);
 
-  const [enabled, setEnabled] = useState<Record<FieldKey, boolean>>(
+  const [enabled, setEnabled] = useState<Record<FieldKey, boolean>>(() =>
     FIELDS.reduce(
-      (acc, f) => ({ ...acc, [f.key]: f.defaultOn }),
+      (acc, f) => ({
+        ...acc,
+        [f.key]: initialSettings.enabled_fields.includes(f.key),
+      }),
       {} as Record<FieldKey, boolean>,
     ),
   );
-  const [required, setRequired] = useState<Record<FieldKey, boolean>>(
+  const [required, setRequired] = useState<Record<FieldKey, boolean>>(() =>
     FIELDS.reduce(
-      (acc, f) => ({ ...acc, [f.key]: false }),
+      (acc, f) => ({
+        ...acc,
+        [f.key]: initialSettings.required_fields.includes(f.key),
+      }),
       {} as Record<FieldKey, boolean>,
     ),
   );
 
   const [copied, setCopied] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(
+    JSON.stringify(initialSettings),
+  );
+  const [isSaving, startSave] = useTransition();
 
   const enabledKeys = FIELDS.filter((f) => enabled[f.key]).map((f) => f.key);
   const requiredKeys = enabledKeys.filter((k) => required[k]);
@@ -152,19 +167,58 @@ export function SquarespaceInstall({
     setTimeout(() => setCopied(false), 1500);
   }
 
+  const currentSettings: WebFormSettings = {
+    method,
+    accent,
+    button_text: buttonText,
+    thanks_text: thanksText,
+    enabled_fields: enabledKeys,
+    required_fields: requiredKeys,
+  };
+  const isDirty = JSON.stringify(currentSettings) !== savedSnapshot;
+
+  function save() {
+    startSave(async () => {
+      const res = await saveWebFormSettings(currentSettings);
+      if (res?.error) {
+        toast.error(res.error);
+      } else {
+        toast.success('Settings saved');
+        setSavedSnapshot(JSON.stringify(currentSettings));
+      }
+    });
+  }
+
   return (
     <div className="rounded-lg border bg-card">
-      <header className="border-b px-6 py-4">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
-            Squarespace
-          </span>
-          <h2 className="font-semibold">Plug-and-play install</h2>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <header className="flex items-start justify-between gap-4 border-b px-6 py-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
+              Squarespace
+            </span>
+            <h2 className="font-semibold">Plug-and-play install</h2>
+            {isDirty && canSave ? (
+              <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300">
+                Unsaved changes
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
           Paste the snippet into a Squarespace <strong>Code Block</strong>. Recommended: iframe
           embed (works on every Squarespace plan).
         </p>
+        </div>
+        {canSave ? (
+          <button
+            onClick={save}
+            disabled={isSaving || !isDirty}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {isSaving ? 'Saving…' : isDirty ? 'Save settings' : 'Saved'}
+          </button>
+        ) : null}
       </header>
 
       <div className="border-b bg-muted/20 px-6 py-3">

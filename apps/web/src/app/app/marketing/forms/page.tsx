@@ -1,5 +1,6 @@
 import { requireCurrent } from '@/lib/auth/current';
 import { PageHeader } from '@/components/ui/page-header';
+import { getWebFormSettings } from '@/lib/actions/web-form';
 import { SquarespaceInstall } from './squarespace-install';
 import { EmbedSnippet } from './embed-snippet';
 
@@ -11,6 +12,8 @@ export default async function FormsPage() {
     : 'http://localhost:3000';
   const appUrl = explicitUrl ?? fallbackUrl;
   const isPreviewUrl = !explicitUrl && /vercel\.app$/.test(appUrl) && appUrl.split('-').length > 2;
+  const savedSettings = await getWebFormSettings();
+  const canSave = ctx.role === 'owner' || ctx.role === 'manager';
 
   return (
     <div className="container max-w-4xl py-8">
@@ -31,7 +34,13 @@ export default async function FormsPage() {
         </div>
       ) : null}
 
-      <SquarespaceInstall appUrl={appUrl} orgSlug={ctx.org.slug} orgName={ctx.org.name} />
+      <SquarespaceInstall
+        appUrl={appUrl}
+        orgSlug={ctx.org.slug}
+        orgName={ctx.org.name}
+        initialSettings={savedSettings}
+        canSave={canSave}
+      />
 
       <div className="mt-10">
         <h2 className="mb-1 text-lg font-semibold">More options</h2>
