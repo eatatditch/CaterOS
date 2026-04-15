@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { tryCreateAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
 
 const serviceTypes = ['delivery', 'pickup', 'full_service', 'drop_off', 'buffet', 'plated'] as const;
@@ -60,5 +61,33 @@ export async function updateEvent(id: string, formData: FormData) {
   if (error) return { error: error.message };
   revalidatePath('/app/events');
   revalidatePath(`/app/events/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Delete an event (calendar + dispatch). Clears staff and BEO records via FK
+ * cascade (they ref events(id) on delete cascade). Idempotent if the id
+ * doesn't exist.
+ */
+export async function deleteEvent(id: string) {
+  const ctx = await requireCurrent();
+  const supabase = await createClient();
+
+  const { error } = await supabase.from('events').delete().eq('id', id);
+  if (error) return { error: error.message };
+
+  const admin = tryCreateAdminClient();
+  if (admin) {
+    await admin.from('audit_logs').insert({
+      org_id: ctx.org.id,
+      actor_id: ctx.user.id,
+      action: 'delete',
+      entity: 'event',
+      entity_id: id,
+    });
+  }
+
+  revalidatePath('/app/events');
+  revalidatePath('/app/dispatch');
   return { ok: true };
 }

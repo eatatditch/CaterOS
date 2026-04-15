@@ -5,6 +5,7 @@ import { requireCurrent } from '@/lib/auth/current';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge, eventStatusTone } from '@/components/ui/status-badge';
+import { DeleteEventButton } from '@/components/delete-event-button';
 
 export default async function DispatchPage() {
   await requireCurrent();
@@ -55,8 +56,11 @@ export default async function DispatchPage() {
               <div className="overflow-hidden rounded-lg border bg-card">
                 <ul className="divide-y">
                   {(dayEvents ?? []).map((e) => (
-                    <li key={e.id} className="p-4 hover:bg-accent/30">
-                      <Link href={`/app/events/${e.id}`} className="flex items-start gap-4">
+                    <li key={e.id} className="flex items-start gap-2 p-4 hover:bg-accent/30">
+                      <Link
+                        href={`/app/events/${e.id}`}
+                        className="flex flex-1 items-start gap-4"
+                      >
                         <div className="w-24 shrink-0 text-sm">
                           <div className="flex items-center gap-1 font-medium">
                             <Clock className="h-3.5 w-3.5" />
@@ -84,6 +88,7 @@ export default async function DispatchPage() {
                           </div>
                         </div>
                       </Link>
+                      <DeleteEventButton eventId={e.id} eventName={e.name} variant="icon" />
                     </li>
                   ))}
                 </ul>

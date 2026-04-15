@@ -6,6 +6,7 @@ import { requireCurrent } from '@/lib/auth/current';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusBadge, eventStatusTone } from '@/components/ui/status-badge';
 import { EventForm } from '../event-form';
+import { DeleteEventButton } from '@/components/delete-event-button';
 
 export default async function EventDetailPage({
   params,
@@ -37,7 +38,16 @@ export default async function EventDetailPage({
       </Link>
       <PageHeader
         title={event.name}
-        actions={<StatusBadge label={event.status} tone={eventStatusTone(event.status)} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge label={event.status} tone={eventStatusTone(event.status)} />
+            <DeleteEventButton
+              eventId={event.id}
+              eventName={event.name}
+              afterDelete="go-to-events"
+            />
+          </div>
+        }
       />
 
       <div className="mb-6 grid gap-3 rounded-lg border bg-card p-6 sm:grid-cols-3">
