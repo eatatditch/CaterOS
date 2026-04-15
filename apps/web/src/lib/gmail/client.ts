@@ -1,5 +1,5 @@
 import 'server-only';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { tryCreateAdminClient } from '@/lib/supabase/admin';
 import { refreshAccessToken } from './oauth';
 
 type Connection = {
@@ -12,7 +12,8 @@ type Connection = {
 };
 
 export async function getConnectionForOrg(orgId: string): Promise<Connection | null> {
-  const admin = createAdminClient();
+  const admin = tryCreateAdminClient();
+  if (!admin) return null;
   const { data } = await admin
     .from('gmail_connections')
     .select('id, org_id, email, access_token, refresh_token, token_expires_at')

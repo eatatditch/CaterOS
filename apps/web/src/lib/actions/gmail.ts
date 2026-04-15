@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient, tryCreateAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
 import { getConnectionForOrg, sendEmail, type SendAttachment } from '@/lib/gmail/client';
 
@@ -187,7 +187,8 @@ export async function syncContactEmails(contactId: string): Promise<{
   new_count?: number;
 }> {
   const ctx = await requireCurrent();
-  const admin = createAdminClient();
+  const admin = tryCreateAdminClient();
+  if (!admin) return { error: 'Gmail sync requires SUPABASE_SERVICE_ROLE_KEY to be set.' };
 
   const { data: contact } = await admin
     .from('contacts')
