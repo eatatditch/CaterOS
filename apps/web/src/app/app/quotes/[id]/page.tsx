@@ -51,7 +51,7 @@ export default async function QuoteDetailPage({
 
       <PageHeader
         title={quote.number}
-        description={`${contactName || 'No contact'} · ${quote.headcount} pax${
+        description={`${contactName || 'No contact'} · ${quote.headcount} guests${
           quote.event_date ? ' · ' + formatDate(quote.event_date) : ''
         }`}
         actions={

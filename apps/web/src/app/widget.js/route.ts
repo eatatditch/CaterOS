@@ -185,7 +185,12 @@ const WIDGET = String.raw`
         if (el.type === 'radio' && !el.checked) return;
         data[el.name] = el.value;
       });
-      if (!data.source) data.source = 'squarespace';
+      if (!data.source) {
+        // Use the hosting site's hostname as source (e.g. "eatatditch.com")
+        try {
+          data.source = location.hostname.replace(/^www\./, '');
+        } catch(e) { data.source = 'web_form'; }
+      }
 
       fetch(API_BASE + '/api/public/leads/' + encodeURIComponent(slug), {
         method: 'POST',

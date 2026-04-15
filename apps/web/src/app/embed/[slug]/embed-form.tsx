@@ -74,7 +74,20 @@ export function EmbedForm({
       return;
     }
 
-    const payload: Record<string, string> = { source: 'squarespace_iframe' };
+    // Derive a meaningful source from the host page's URL (Squarespace site
+    // hostname, e.g. "eatatditch.com") when available, fall back to 'web_form'.
+    let source = 'web_form';
+    try {
+      const ref = document.referrer;
+      if (ref) {
+        const u = new URL(ref);
+        source = u.hostname.replace(/^www\./, '');
+      }
+    } catch {
+      /* noop */
+    }
+
+    const payload: Record<string, string> = { source };
     fd.forEach((v, k) => {
       if (typeof v === 'string' && v.length > 0) payload[k] = v;
     });

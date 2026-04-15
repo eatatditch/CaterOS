@@ -248,7 +248,7 @@ export default async function DashboardPage() {
                           hour: 'numeric',
                           minute: '2-digit',
                         })}
-                        {e.venue_name ? ` · ${e.venue_name}` : ''} · {e.headcount} pax
+                        {e.venue_name ? ` · ${e.venue_name}` : ''} · {e.headcount} guests
                       </div>
                     </div>
                     <StatusBadge label={e.status} tone={eventStatusTone(e.status)} />

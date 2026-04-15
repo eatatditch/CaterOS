@@ -31,6 +31,15 @@ type LineItem = {
   unit_price_cents: number;
 };
 
+export type InquiryPrefill = {
+  deal_id: string;
+  contact_id: string | null;
+  event_date: string;
+  headcount: number;
+  service_type: string;
+  location_id: string;
+};
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -39,14 +48,23 @@ export function QuoteBuilder({
   currency,
   contacts,
   menuItems,
+  deals = [],
+  locations = [],
+  prefill = null,
 }: {
   currency: string;
   contacts: { id: string; label: string }[];
   menuItems: MenuItem[];
+  deals?: { id: string; label: string; subtitle: string }[];
+  locations?: { id: string; name: string }[];
+  prefill?: InquiryPrefill | null;
 }) {
-  const [contactId, setContactId] = useState('');
-  const [headcount, setHeadcount] = useState(0);
-  const [eventDate, setEventDate] = useState('');
+  const [dealId, setDealId] = useState(prefill?.deal_id ?? '');
+  const [contactId, setContactId] = useState(prefill?.contact_id ?? '');
+  const [headcount, setHeadcount] = useState(prefill?.headcount ?? 0);
+  const [eventDate, setEventDate] = useState(prefill?.event_date ?? '');
+  const [serviceType, setServiceType] = useState(prefill?.service_type ?? '');
+  const [locationId, setLocationId] = useState(prefill?.location_id ?? '');
   const [notes, setNotes] = useState('');
   const [taxRate, setTaxRate] = useState(0.0875);
   const [serviceFeeRate, setServiceFeeRate] = useState(0.18);
@@ -109,6 +127,7 @@ export function QuoteBuilder({
     startTransition(async () => {
       const res = await createQuote({
         contact_id: contactId || null,
+        deal_id: dealId || null,
         headcount,
         event_date: eventDate || null,
         notes: notes || null,
@@ -137,6 +156,43 @@ export function QuoteBuilder({
       <div className="space-y-6">
         <section className="rounded-lg border bg-card p-6">
           <h2 className="mb-4 font-semibold">Event info</h2>
+
+          {deals.length > 0 ? (
+            <Field
+              label="Pull from inquiry"
+              htmlFor="deal_id"
+              className="mb-4"
+              hint="Select an existing lead/deal to pre-fill date, guests, service type, and location."
+            >
+              <select
+                id="deal_id"
+                value={dealId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDealId(next);
+                  if (next) {
+                    const d = deals.find((x) => x.id === next);
+                    if (d) {
+                      // navigate to self with ?deal=... so server prefill re-runs
+                      const params = new URLSearchParams(window.location.search);
+                      params.set('deal', next);
+                      window.location.search = params.toString();
+                    }
+                  }
+                }}
+                className={selectCls}
+              >
+                <option value="">— None —</option>
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                    {d.subtitle ? ` · ${d.subtitle}` : ''}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Contact" htmlFor="contact_id">
               <select
@@ -162,7 +218,7 @@ export function QuoteBuilder({
                 className={inputCls}
               />
             </Field>
-            <Field label="Head count" htmlFor="headcount">
+            <Field label="Guest count" htmlFor="headcount">
               <input
                 id="headcount"
                 type="number"
@@ -172,6 +228,41 @@ export function QuoteBuilder({
                 className={inputCls}
               />
             </Field>
+            <Field label="Service type" htmlFor="service_type">
+              <select
+                id="service_type"
+                value={serviceType}
+                onChange={(e) => setServiceType(e.target.value)}
+                className={selectCls}
+              >
+                <option value="">—</option>
+                <option value="on_premise">On-premise</option>
+                <option value="off_premise">Off-premise</option>
+                <option value="full_service">Full service</option>
+                <option value="drop_off">Drop off</option>
+                <option value="pickup">Pickup</option>
+                <option value="delivery">Delivery</option>
+                <option value="buffet">Buffet</option>
+                <option value="plated">Plated</option>
+              </select>
+            </Field>
+            {locations.length > 0 ? (
+              <Field label="Location" htmlFor="location_id">
+                <select
+                  id="location_id"
+                  value={locationId}
+                  onChange={(e) => setLocationId(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="">—</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
           </div>
           <Field label="Notes" htmlFor="notes" className="mt-4">
             <textarea

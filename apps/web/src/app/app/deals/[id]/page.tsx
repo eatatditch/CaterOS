@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { DealForm } from '../deal-form';
 import { ActivityTimeline } from '@/components/activity-timeline';
 import { NewActivityForm } from '@/components/new-activity-form';
+import { ContactEmailPanel } from '@/components/contact-email-panel';
 
 export default async function DealDetailPage({
   params,
@@ -26,18 +27,30 @@ export default async function DealDetailPage({
 
   if (!deal) notFound();
 
-  const { data: stages } = await supabase
-    .from('stages')
-    .select('id, name, position')
-    .eq('pipeline_id', deal.pipeline_id)
-    .order('position');
-
-  const { data: activities } = await supabase
-    .from('activities')
-    .select('*')
-    .eq('deal_id', id)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  const [
+    { data: stages },
+    { data: activities },
+    { data: linkedContact },
+  ] = await Promise.all([
+    supabase
+      .from('stages')
+      .select('id, name, position')
+      .eq('pipeline_id', deal.pipeline_id)
+      .order('position'),
+    supabase
+      .from('activities')
+      .select('*')
+      .eq('deal_id', id)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    deal.contact_id
+      ? supabase
+          .from('contacts')
+          .select('id, first_name, last_name, email, phone')
+          .eq('id', deal.contact_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   return (
     <div className="container py-8">
@@ -50,6 +63,14 @@ export default async function DealDetailPage({
       <PageHeader
         title={deal.title}
         description={`${(deal.stages as unknown as { name: string } | null)?.name ?? ''} · ${formatMoney(deal.amount_cents, deal.currency)}`}
+        actions={
+          <Link
+            href={`/app/quotes/new?deal=${deal.id}`}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            Create quote from this
+          </Link>
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -68,6 +89,13 @@ export default async function DealDetailPage({
             />
           </section>
 
+          {linkedContact ? (
+            <ContactEmailPanel
+              contactId={linkedContact.id}
+              contactEmail={linkedContact.email}
+            />
+          ) : null}
+
           <section className="rounded-lg border bg-card p-6">
             <h2 className="mb-4 font-semibold">Log an activity</h2>
             <NewActivityForm dealId={id} contactId={deal.contact_id ?? undefined} />
@@ -78,6 +106,38 @@ export default async function DealDetailPage({
             <ActivityTimeline activities={activities ?? []} />
           </section>
         </div>
+
+        <aside className="space-y-4">
+          {linkedContact ? (
+            <div className="rounded-lg border bg-card p-4 text-sm">
+              <div className="mb-2 font-semibold">Contact</div>
+              <Link
+                href={`/app/contacts/${linkedContact.id}`}
+                className="block font-medium hover:text-primary"
+              >
+                {[linkedContact.first_name, linkedContact.last_name]
+                  .filter(Boolean)
+                  .join(' ') || '(no name)'}
+              </Link>
+              {linkedContact.email ? (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {linkedContact.email}
+                </div>
+              ) : null}
+              {linkedContact.phone ? (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {linkedContact.phone}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {deal.source ? (
+            <div className="rounded-lg border bg-card p-4 text-sm">
+              <div className="mb-1 font-semibold">Source</div>
+              <div className="text-muted-foreground">{deal.source}</div>
+            </div>
+          ) : null}
+        </aside>
       </div>
     </div>
   );
