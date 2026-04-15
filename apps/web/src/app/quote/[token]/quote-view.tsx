@@ -47,10 +47,14 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
     setError(null);
     startTransition(async () => {
       const res = await acceptQuote(token);
-      if (res?.error) {
+      if ('error' in res) {
         setError(res.error);
-      } else {
-        setAccepted(true);
+        return;
+      }
+      setAccepted(true);
+      // If a deposit is due, send them straight to the deposit flow
+      if (res.deposit_cents > 0) {
+        window.location.href = `/quote/${token}/deposit`;
       }
     });
   }

@@ -14,6 +14,6 @@ export const config = {
      * - /widget.js (public hosted widget)
      * - /api/public/* (public API endpoints)
      */
-    '/((?!_next/static|_next/image|favicon.ico|embed(?:/|$)|quote(?:/|$)|widget\\.js|api/public|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|embed(?:/|$)|quote(?:/|$)|widget\\.js|api/public|api/stripe|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
