@@ -1,15 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 
 export function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
+  const prefilledEmail = searchParams.get('email') ?? '';
+  const isInvite = !!inviteToken;
+
   const [orgName, setOrgName] = useState('');
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(prefilledEmail);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -17,12 +22,15 @@ export function SignupForm() {
     e.preventDefault();
     setLoading(true);
     const supabase = createClient();
+    const redirectPath = inviteToken ? `/invite/${inviteToken}` : '/app';
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, org_name: orgName },
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/app`,
+        data: isInvite
+          ? { full_name: fullName, invite_token: inviteToken }
+          : { full_name: fullName, org_name: orgName },
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
       },
     });
     setLoading(false);
@@ -37,17 +45,23 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div>
-        <label className="mb-1 block text-sm font-medium">Catering company</label>
-        <input
-          type="text"
-          required
-          value={orgName}
-          onChange={(e) => setOrgName(e.target.value)}
-          placeholder="Acme Catering Co."
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
+      {!isInvite ? (
+        <div>
+          <label className="mb-1 block text-sm font-medium">Catering company</label>
+          <input
+            type="text"
+            required
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+            placeholder="Acme Catering Co."
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+      ) : (
+        <p className="rounded-md bg-primary/10 p-3 text-sm text-primary">
+          You&apos;re accepting an invitation. Create an account to join the team.
+        </p>
+      )}
       <div>
         <label className="mb-1 block text-sm font-medium">Your name</label>
         <input
@@ -65,8 +79,9 @@ export function SignupForm() {
           required
           autoComplete="email"
           value={email}
+          readOnly={isInvite}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
         />
       </div>
       <div>
@@ -86,7 +101,7 @@ export function SignupForm() {
         disabled={loading}
         className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
       >
-        {loading ? 'Creating account…' : 'Create account'}
+        {loading ? 'Creating account…' : isInvite ? 'Accept invitation' : 'Create account'}
       </button>
     </form>
   );

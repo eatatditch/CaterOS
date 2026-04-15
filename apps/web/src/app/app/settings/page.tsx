@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { MapPin, Users2, Building2, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
 import { PageHeader } from '@/components/ui/page-header';
@@ -19,23 +21,60 @@ export default async function SettingsPage() {
   const ctx = await requireCurrent();
   const supabase = await createClient();
 
-  const { data: members } = await supabase
-    .from('memberships')
-    .select('role, user_id, profiles:user_id (full_name), created_at')
-    .eq('org_id', ctx.org.id);
-
-  const { data: locations } = await supabase
-    .from('locations')
-    .select('id, name, city, region, is_default')
-    .eq('org_id', ctx.org.id)
-    .order('is_default', { ascending: false });
+  const [{ count: memberCount }, { count: locationCount }] = await Promise.all([
+    supabase
+      .from('memberships')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('org_id', ctx.org.id),
+    supabase
+      .from('locations')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', ctx.org.id),
+  ]);
 
   return (
-    <div className="container max-w-4xl py-8">
+    <div className="container max-w-5xl py-8">
       <PageHeader title="Settings" description="Organization, team, and locations." />
 
-      <section className="mb-6 rounded-lg border bg-card p-6">
-        <h2 className="mb-4 font-semibold">Organization</h2>
+      <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <Link
+          href="/app/settings/team"
+          className="group flex items-center justify-between rounded-lg border bg-card p-5 transition-shadow hover:shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <Users2 className="h-6 w-6 text-primary" />
+            <div>
+              <div className="font-semibold group-hover:text-primary">Team</div>
+              <div className="text-xs text-muted-foreground">
+                {memberCount ?? 0} {memberCount === 1 ? 'member' : 'members'} · invite, change roles
+              </div>
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+        </Link>
+        <Link
+          href="/app/settings/locations"
+          className="group flex items-center justify-between rounded-lg border bg-card p-5 transition-shadow hover:shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <MapPin className="h-6 w-6 text-primary" />
+            <div>
+              <div className="font-semibold group-hover:text-primary">Locations</div>
+              <div className="text-xs text-muted-foreground">
+                {locationCount ?? 0}{' '}
+                {locationCount === 1 ? 'location' : 'locations'} · kitchens, dispatch zones
+              </div>
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+        </Link>
+      </div>
+
+      <section className="rounded-lg border bg-card p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-primary" />
+          <h2 className="font-semibold">Organization</h2>
+        </div>
         <OrgSettingsForm
           initial={{
             name: ctx.org.name,
@@ -45,52 +84,6 @@ export default async function SettingsPage() {
           timezones={timezones}
           canEdit={ctx.role === 'owner' || ctx.role === 'manager'}
         />
-      </section>
-
-      <section className="mb-6 rounded-lg border bg-card p-6">
-        <h2 className="mb-4 font-semibold">Team ({members?.length ?? 0})</h2>
-        <ul className="divide-y">
-          {(members ?? []).map((m) => {
-            const name =
-              (m.profiles as unknown as { full_name: string | null } | null)?.full_name ??
-              '(no name)';
-            return (
-              <li
-                key={m.user_id}
-                className="flex items-center justify-between py-2 text-sm"
-              >
-                <span className="font-medium">{name}</span>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                  {m.role.replace('_', ' ')}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-4 text-xs text-muted-foreground">
-          Invite flow with magic links is shipping in Phase 7.
-        </p>
-      </section>
-
-      <section className="rounded-lg border bg-card p-6">
-        <h2 className="mb-4 font-semibold">Locations ({locations?.length ?? 0})</h2>
-        <ul className="divide-y">
-          {(locations ?? []).map((l) => (
-            <li key={l.id} className="flex items-center justify-between py-2 text-sm">
-              <div>
-                <span className="font-medium">{l.name}</span>
-                {l.is_default && (
-                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                    default
-                  </span>
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {[l.city, l.region].filter(Boolean).join(', ') || '—'}
-              </span>
-            </li>
-          ))}
-        </ul>
       </section>
     </div>
   );
