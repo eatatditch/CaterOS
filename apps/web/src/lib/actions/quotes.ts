@@ -180,6 +180,10 @@ export async function deleteQuote(id: string) {
     await admin.from('invoices').delete().in('id', invoiceIds);
   }
 
+  // Cascade: remove any calendar events tied to this quote so they don't
+  // linger on the events calendar / dispatch board.
+  await client.from('events').delete().eq('quote_id', id);
+
   // quote_items cascade via FK; deals stay (they may pre-date the quote)
   const { error } = await supabase.from('quotes').delete().eq('id', id);
   if (error) return { error: error.message };
@@ -197,6 +201,8 @@ export async function deleteQuote(id: string) {
 
   revalidatePath('/app/quotes');
   revalidatePath('/app/pipeline');
+  revalidatePath('/app/events');
+  revalidatePath('/app/dispatch');
   return { ok: true };
 }
 

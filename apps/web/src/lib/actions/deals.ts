@@ -55,6 +55,24 @@ export async function updateDealStage(id: string, stageId: string) {
 
   const { error } = await supabase.from('deals').update(patch).eq('id', id);
   if (error) return { error: error.message };
+
+  // If moving to Lost, remove any calendar events tied to this deal's quotes —
+  // they should no longer show up on the calendar or dispatch board.
+  if (stage?.is_lost) {
+    const admin = tryCreateAdminClient();
+    const client = admin ?? supabase;
+    const { data: quoteRows } = await client
+      .from('quotes')
+      .select('id')
+      .eq('deal_id', id);
+    const quoteIds = (quoteRows ?? []).map((q) => q.id);
+    if (quoteIds.length > 0) {
+      await client.from('events').delete().in('quote_id', quoteIds);
+      revalidatePath('/app/events');
+      revalidatePath('/app/dispatch');
+    }
+  }
+
   revalidatePath('/app/pipeline');
   revalidatePath(`/app/deals/${id}`);
   return { ok: true };
@@ -115,6 +133,12 @@ export async function deleteDeal(id: string) {
     }
   }
 
+  // Remove calendar events tied to any of this deal's quotes BEFORE deleting
+  // the deal itself (so we don't lose the quote→deal linkage mid-flight).
+  if (quoteIds.length > 0) {
+    await client.from('events').delete().in('quote_id', quoteIds);
+  }
+
   const { error } = await supabase.from('deals').delete().eq('id', id);
   if (error) return { error: error.message };
 
@@ -130,5 +154,7 @@ export async function deleteDeal(id: string) {
 
   revalidatePath('/app/pipeline');
   revalidatePath('/app/contacts');
+  revalidatePath('/app/events');
+  revalidatePath('/app/dispatch');
   return { ok: true };
 }
