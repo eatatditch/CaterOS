@@ -5,9 +5,12 @@ import { EmbedSnippet } from './embed-snippet';
 
 export default async function FormsPage() {
   const ctx = await requireCurrent();
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const explicitUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const fallbackUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000';
+  const appUrl = explicitUrl ?? fallbackUrl;
+  const isPreviewUrl = !explicitUrl && /vercel\.app$/.test(appUrl) && appUrl.split('-').length > 2;
 
   return (
     <div className="container max-w-4xl py-8">
@@ -15,6 +18,18 @@ export default async function FormsPage() {
         title="Web forms"
         description="Drop a lead-capture form on any website. Submissions create a deal in your pipeline auto-assigned to a catering manager."
       />
+
+      {isPreviewUrl ? (
+        <div className="mb-6 rounded-lg border border-yellow-400/40 bg-yellow-50 p-4 text-sm text-yellow-900 dark:bg-yellow-500/10 dark:text-yellow-200">
+          <p className="font-semibold">Heads up — embed URLs are pointing at a preview deployment.</p>
+          <p className="mt-1">
+            Set <code className="rounded bg-yellow-100 px-1 text-xs dark:bg-yellow-500/20">NEXT_PUBLIC_APP_URL</code>{' '}
+            in Vercel → Settings → Environment Variables to your production URL (e.g.{' '}
+            <code className="rounded bg-yellow-100 px-1 text-xs dark:bg-yellow-500/20">https://cater-os.vercel.app</code>)
+            and redeploy. Preview URLs are behind Vercel Deployment Protection, so iframes won&apos;t render on external sites.
+          </p>
+        </div>
+      ) : null}
 
       <SquarespaceInstall appUrl={appUrl} orgSlug={ctx.org.slug} orgName={ctx.org.name} />
 
