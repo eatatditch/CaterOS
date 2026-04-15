@@ -14,13 +14,14 @@ import {
 } from 'lucide-react';
 import { requireCurrent } from '@/lib/auth/current';
 import { NavLink } from '@/components/nav-link';
-import { MobileNav } from '@/components/mobile-nav';
+import { MobileNav, type MobileNavItem } from '@/components/mobile-nav';
 import { SignOutButton } from '@/components/sign-out-button';
 
-// All /app routes are per-user. Never prerender them at build time.
 export const dynamic = 'force-dynamic';
 
-const nav = [
+// Each entry pairs the href/label with a pre-rendered icon JSX element so it
+// can cross the RSC → Client Component boundary (functions can't).
+const navConfig = [
   { href: '/app', label: 'Dashboard', Icon: LayoutDashboard },
   { href: '/app/contacts', label: 'Contacts', Icon: Users },
   { href: '/app/pipeline', label: 'Pipeline', Icon: Kanban },
@@ -37,11 +38,17 @@ const nav = [
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireCurrent();
 
+  const mobileItems: MobileNavItem[] = navConfig.map(({ href, label, Icon }) => ({
+    href,
+    label,
+    icon: <Icon className="h-4 w-4" />,
+  }));
+
   return (
     <div className="flex min-h-[100dvh] flex-col md:flex-row">
       {/* Mobile top bar + drawer */}
       <MobileNav
-        items={nav}
+        items={mobileItems}
         orgName={ctx.org.name}
         userEmail={ctx.user.email ?? ''}
         role={ctx.role}
@@ -58,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {nav.map(({ href, label, Icon }) => (
+          {navConfig.map(({ href, label, Icon }) => (
             <NavLink
               key={href}
               href={href}

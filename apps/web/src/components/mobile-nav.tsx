@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChefHat, Menu, X } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type NavItem = {
+export type MobileNavItem = {
   href: string;
   label: string;
-  Icon: LucideIcon;
+  icon: React.ReactNode; // pre-rendered JSX, not a component type
 };
 
 export function MobileNav({
@@ -20,7 +19,7 @@ export function MobileNav({
   role,
   signOut,
 }: {
-  items: NavItem[];
+  items: MobileNavItem[];
   orgName: string;
   userEmail: string;
   role: string;
@@ -29,12 +28,10 @@ export function MobileNav({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Close drawer on route change
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  // Prevent body scroll when drawer is open
   useEffect(() => {
     if (open) {
       const prev = document.body.style.overflow;
@@ -47,7 +44,6 @@ export function MobileNav({
 
   return (
     <>
-      {/* Top bar — only on mobile */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b bg-card px-4 md:hidden">
         <button
           type="button"
@@ -64,18 +60,14 @@ export function MobileNav({
         <div className="w-10" aria-hidden />
       </header>
 
-      {/* Drawer */}
       {open ? (
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          {/* Backdrop */}
           <button
             type="button"
             aria-label="Close menu"
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-background/70 backdrop-blur-sm"
           />
-
-          {/* Panel */}
           <aside className="absolute left-0 top-0 flex h-full w-[min(320px,85vw)] flex-col bg-card shadow-xl">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div className="flex items-center gap-2">
@@ -97,7 +89,7 @@ export function MobileNav({
 
             <nav className="flex-1 overflow-y-auto px-3 py-4">
               <ul className="space-y-0.5">
-                {items.map(({ href, label, Icon }) => {
+                {items.map(({ href, label, icon }) => {
                   const active = pathname === href || pathname.startsWith(href + '/');
                   return (
                     <li key={href}>
@@ -110,7 +102,7 @@ export function MobileNav({
                             : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                         )}
                       >
-                        <Icon className="h-4 w-4" />
+                        {icon}
                         {label}
                       </Link>
                     </li>
