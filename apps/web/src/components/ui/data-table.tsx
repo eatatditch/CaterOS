@@ -22,8 +22,8 @@ export function DataTable<T extends { id: string }>({
   if (!rows.length && emptyState) return <>{emptyState}</>;
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-lg border bg-card">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="bg-muted/50">
           <tr>
             {columns.map((c) => (

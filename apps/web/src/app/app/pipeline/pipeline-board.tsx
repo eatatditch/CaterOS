@@ -52,75 +52,79 @@ export function PipelineBoard({ stages, deals }: { stages: Stage[]; deals: Deal[
   }
 
   return (
-    <div
-      className="grid min-h-[480px] gap-3"
-      style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}
-    >
-      {stages.map((stage) => {
-        const columnDeals = deals.filter((d) => d.stage_id === stage.id);
-        const total = columnDeals.reduce((s, d) => s + d.amount_cents, 0);
-        const toneBorder = stage.is_won
-          ? 'border-t-green-500'
-          : stage.is_lost
-            ? 'border-t-red-500'
-            : 'border-t-primary/60';
-        return (
-          <div
-            key={stage.id}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setHoverStage(stage.id);
-            }}
-            onDragLeave={() => setHoverStage((s) => (s === stage.id ? null : s))}
-            onDrop={() => onDrop(stage.id)}
-            className={cn(
-              'flex min-w-0 flex-col rounded-lg border border-t-2 bg-muted/30 transition-colors',
-              toneBorder,
-              hoverStage === stage.id && 'bg-primary/5 ring-2 ring-primary/40',
-            )}
-          >
-            <div className="flex items-center justify-between border-b bg-card px-3 py-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{stage.name}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {columnDeals.length} · {formatMoney(total, columnDeals[0]?.currency ?? 'USD')}
-                </div>
-              </div>
-              <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-                {stage.probability}%
-              </span>
-            </div>
-            <div className="flex-1 space-y-2 overflow-y-auto p-2">
-              {columnDeals.map((d) => (
-                <Link
-                  key={d.id}
-                  href={`/app/deals/${d.id}`}
-                  draggable
-                  onDragStart={() => setDraggingId(d.id)}
-                  onDragEnd={() => setDraggingId(null)}
-                  className={cn(
-                    'block rounded-md border bg-card p-2.5 text-sm shadow-sm transition-shadow hover:shadow',
-                    draggingId === d.id && 'opacity-50',
-                  )}
-                >
-                  <div className="mb-1 line-clamp-2 text-sm font-medium leading-tight">{d.title}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {d.company_name ?? d.contact_name ?? 'No contact'}
-                  </div>
-                  <div className="mt-1.5 text-sm font-semibold">
-                    {formatMoney(d.amount_cents, d.currency)}
-                  </div>
-                </Link>
-              ))}
-              {!columnDeals.length && (
-                <div className="py-6 text-center text-[11px] text-muted-foreground">
-                  Drop here
-                </div>
+    <div className="-mx-4 md:mx-0">
+      <div
+        className="flex min-h-[480px] snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-2 md:grid md:overflow-visible md:px-0"
+        style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}
+      >
+        {stages.map((stage) => {
+          const columnDeals = deals.filter((d) => d.stage_id === stage.id);
+          const total = columnDeals.reduce((s, d) => s + d.amount_cents, 0);
+          const toneBorder = stage.is_won
+            ? 'border-t-green-500'
+            : stage.is_lost
+              ? 'border-t-red-500'
+              : 'border-t-primary/60';
+          return (
+            <div
+              key={stage.id}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setHoverStage(stage.id);
+              }}
+              onDragLeave={() => setHoverStage((s) => (s === stage.id ? null : s))}
+              onDrop={() => onDrop(stage.id)}
+              className={cn(
+                'flex w-[85vw] max-w-[320px] shrink-0 snap-start flex-col rounded-lg border border-t-2 bg-muted/30 transition-colors md:w-auto md:max-w-none md:shrink md:min-w-0',
+                toneBorder,
+                hoverStage === stage.id && 'bg-primary/5 ring-2 ring-primary/40',
               )}
+            >
+              <div className="flex items-center justify-between border-b bg-card px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{stage.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {columnDeals.length} · {formatMoney(total, columnDeals[0]?.currency ?? 'USD')}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                  {stage.probability}%
+                </span>
+              </div>
+              <div className="flex-1 space-y-2 overflow-y-auto p-2">
+                {columnDeals.map((d) => (
+                  <Link
+                    key={d.id}
+                    href={`/app/deals/${d.id}`}
+                    draggable
+                    onDragStart={() => setDraggingId(d.id)}
+                    onDragEnd={() => setDraggingId(null)}
+                    className={cn(
+                      'block rounded-md border bg-card p-2.5 text-sm shadow-sm transition-shadow hover:shadow',
+                      draggingId === d.id && 'opacity-50',
+                    )}
+                  >
+                    <div className="mb-1 line-clamp-2 text-sm font-medium leading-tight">
+                      {d.title}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {d.company_name ?? d.contact_name ?? 'No contact'}
+                    </div>
+                    <div className="mt-1.5 text-sm font-semibold">
+                      {formatMoney(d.amount_cents, d.currency)}
+                    </div>
+                  </Link>
+                ))}
+                {!columnDeals.length && (
+                  <div className="py-6 text-center text-[11px] text-muted-foreground">
+                    Drop here
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
