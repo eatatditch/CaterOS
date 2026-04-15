@@ -1,0 +1,33 @@
+{
+  "name": "cater-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CaterOS — catering CRM + ops platform",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
+    "db:generate": "pnpm --filter @cateros/db generate",
+    "db:migrate": "pnpm --filter @cateros/db migrate",
+    "db:push": "pnpm --filter @cateros/db push",
+    "db:studio": "pnpm --filter @cateros/db studio",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:types": "supabase gen types typescript --local > packages/db/src/types/supabase.ts"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.8",
+    "turbo": "^2.2.3",
+    "typescript": "^5.6.3"
+  }
+}
