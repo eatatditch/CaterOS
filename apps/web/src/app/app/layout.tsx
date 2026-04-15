@@ -16,6 +16,9 @@ import { requireCurrent } from '@/lib/auth/current';
 import { NavLink } from '@/components/nav-link';
 import { SignOutButton } from '@/components/sign-out-button';
 
+// All /app routes are per-user. Never prerender them at build time.
+export const dynamic = 'force-dynamic';
+
 const nav = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/app/contacts', label: 'Contacts', icon: Users },
