@@ -45,6 +45,8 @@ const FIELDS: FieldDef[] = [
   { key: 'message', label: 'Message', description: 'Free-text notes', defaultOn: true },
 ];
 
+type Method = 'iframe' | 'script';
+
 export function SquarespaceInstall({
   appUrl,
   orgSlug,
@@ -54,6 +56,7 @@ export function SquarespaceInstall({
   orgSlug: string;
   orgName: string;
 }) {
+  const [method, setMethod] = useState<Method>('iframe');
   const [accent, setAccent] = useState('#ea580c');
   const [buttonText, setButtonText] = useState('Request a quote');
   const [thanksText, setThanksText] = useState("Thanks! We'll be in touch shortly.");
@@ -76,7 +79,45 @@ export function SquarespaceInstall({
   const enabledKeys = FIELDS.filter((f) => enabled[f.key]).map((f) => f.key);
   const requiredKeys = enabledKeys.filter((k) => required[k]);
 
+  // Build the snippet for the selected method.
   const snippet = useMemo(() => {
+    const defaultSet = FIELDS.filter((f) => f.defaultOn)
+      .map((f) => f.key)
+      .sort()
+      .join(',');
+    const currentSet = [...enabledKeys].sort().join(',');
+    const fieldsOverride = currentSet !== defaultSet ? enabledKeys.join(',') : null;
+    const requiredOverride = requiredKeys.length > 0 ? requiredKeys.join(',') : null;
+
+    if (method === 'iframe') {
+      const qs = new URLSearchParams();
+      qs.set('accent', accent);
+      qs.set('button', buttonText);
+      qs.set('thanks', thanksText);
+      if (fieldsOverride) qs.set('fields', fieldsOverride);
+      if (requiredOverride) qs.set('required', requiredOverride);
+
+      return [
+        `<!-- ${orgName} — catering request form -->`,
+        `<iframe`,
+        `  src="${appUrl}/embed/${orgSlug}?${qs.toString()}"`,
+        `  style="width:100%;max-width:560px;height:900px;border:0;display:block;margin:0 auto"`,
+        `  title="${orgName} — Request a quote"`,
+        `  loading="lazy"`,
+        `></iframe>`,
+        `<script>`,
+        `  // Auto-resize the iframe to match its content`,
+        `  window.addEventListener('message', function(e){`,
+        `    if (e.data && e.data.source === 'cateros' && e.data.type === 'resize') {`,
+        `      var f = document.currentScript && document.currentScript.previousElementSibling;`,
+        `      if (f && f.tagName === 'IFRAME') f.style.height = e.data.height + 'px';`,
+        `    }`,
+        `  });`,
+        `</script>`,
+      ].join('\n');
+    }
+
+    // Script method
     const attrs = [
       `data-cateros-form`,
       `data-org="${orgSlug}"`,
@@ -84,25 +125,25 @@ export function SquarespaceInstall({
       `data-button="${buttonText}"`,
       `data-thanks="${thanksText}"`,
     ];
-    // Only emit data-fields when user has customized the set
-    const defaultSet = FIELDS.filter((f) => f.defaultOn)
-      .map((f) => f.key)
-      .sort()
-      .join(',');
-    const currentSet = [...enabledKeys].sort().join(',');
-    if (currentSet !== defaultSet) {
-      attrs.push(`data-fields="${enabledKeys.join(',')}"`);
-    }
-    if (requiredKeys.length > 0) {
-      attrs.push(`data-required="${requiredKeys.join(',')}"`);
-    }
+    if (fieldsOverride) attrs.push(`data-fields="${fieldsOverride}"`);
+    if (requiredOverride) attrs.push(`data-required="${requiredOverride}"`);
 
     return [
       `<!-- ${orgName} — catering request form -->`,
       `<div ${attrs.join('\n     ')}></div>`,
       `<script src="${appUrl}/widget.js"></script>`,
     ].join('\n');
-  }, [orgSlug, orgName, appUrl, accent, buttonText, thanksText, enabledKeys, requiredKeys]);
+  }, [
+    method,
+    orgSlug,
+    orgName,
+    appUrl,
+    accent,
+    buttonText,
+    thanksText,
+    enabledKeys,
+    requiredKeys,
+  ]);
 
   async function copy() {
     await navigator.clipboard.writeText(snippet);
@@ -121,13 +162,38 @@ export function SquarespaceInstall({
           <h2 className="font-semibold">Plug-and-play install</h2>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose which fields to show, customize the look, and paste the snippet into a Squarespace{' '}
-          <strong>Code Block</strong>.
+          Paste the snippet into a Squarespace <strong>Code Block</strong>. Recommended: iframe
+          embed (works on every Squarespace plan).
         </p>
       </header>
 
+      <div className="border-b bg-muted/20 px-6 py-3">
+        <div className="flex gap-2">
+          {(
+            [
+              { key: 'iframe', label: 'iframe embed', hint: 'Works everywhere' },
+              { key: 'script', label: 'Script embed', hint: 'Requires Business plan+' },
+            ] as const
+          ).map(({ key, label, hint }) => (
+            <button
+              key={key}
+              onClick={() => setMethod(key)}
+              className={cn(
+                'flex-1 rounded-md border px-3 py-2 text-left text-sm transition-colors',
+                method === key
+                  ? 'border-primary bg-primary/5 text-foreground'
+                  : 'border-transparent bg-background text-muted-foreground hover:border-border',
+              )}
+            >
+              <div className="font-medium">{label}</div>
+              <div className="text-xs text-muted-foreground">{hint}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-6 p-6 lg:grid-cols-[1fr_1fr]">
-        {/* LEFT: Configuration */}
+        {/* LEFT: config */}
         <div className="space-y-6">
           <section>
             <h3 className="mb-3 text-sm font-semibold">Fields</h3>
@@ -218,25 +284,23 @@ export function SquarespaceInstall({
           </section>
 
           <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-            <strong className="text-foreground">How to install:</strong>
+            <strong className="text-foreground">How to install on Squarespace:</strong>
             <ol className="mt-2 space-y-1.5 pl-4">
               <li>1. Edit your Squarespace page</li>
               <li>
-                2. Add a <strong>Code Block</strong> (not Markdown)
+                2. Add a <strong>Code Block</strong> (&ldquo;+&rdquo; → Code)
               </li>
               <li>3. Paste the snippet on the right</li>
-              <li>4. Save.</li>
+              <li>4. Save &amp; publish</li>
             </ol>
           </div>
         </div>
 
-        {/* RIGHT: Snippet + preview */}
+        {/* RIGHT: snippet + preview */}
         <div className="min-w-0 space-y-5">
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-xs font-medium text-muted-foreground">
-                Snippet (copy this)
-              </div>
+              <div className="text-xs font-medium text-muted-foreground">Copy this snippet</div>
               <button
                 onClick={copy}
                 className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent"
@@ -245,7 +309,7 @@ export function SquarespaceInstall({
                 {copied ? 'Copied' : 'Copy snippet'}
               </button>
             </div>
-            <pre className="max-h-64 overflow-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed">
+            <pre className="max-h-72 overflow-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed">
               <code>{snippet}</code>
             </pre>
           </div>
@@ -288,9 +352,7 @@ function PreviewForm({
 
   return (
     <div className="space-y-3">
-      <div
-        className={cn('grid gap-3', enabled.last_name ? 'sm:grid-cols-2' : 'sm:grid-cols-1')}
-      >
+      <div className={cn('grid gap-3', enabled.last_name ? 'sm:grid-cols-2' : 'sm:grid-cols-1')}>
         <div>
           <label className={labelCls}>
             First name <ReqMark />
@@ -307,9 +369,7 @@ function PreviewForm({
         )}
       </div>
 
-      <div
-        className={cn('grid gap-3', enabled.phone ? 'sm:grid-cols-2' : 'sm:grid-cols-1')}
-      >
+      <div className={cn('grid gap-3', enabled.phone ? 'sm:grid-cols-2' : 'sm:grid-cols-1')}>
         <div>
           <label className={labelCls}>
             Email <ReqMark />
