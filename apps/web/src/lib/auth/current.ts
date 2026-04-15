@@ -10,14 +10,6 @@ export type CurrentContext = {
   role: MemberRole;
 };
 
-type MembershipRow = {
-  role: MemberRole;
-  orgs:
-    | { id: string; name: string; slug: string; timezone: string; currency: string }
-    | { id: string; name: string; slug: string; timezone: string; currency: string }[]
-    | null;
-};
-
 export const getCurrent = cache(async (): Promise<CurrentContext | null> => {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     throw new Error(
@@ -31,27 +23,36 @@ export const getCurrent = cache(async (): Promise<CurrentContext | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data, error } = await supabase
+  // Two explicit queries — no PostgREST relation embed (avoids schema-cache issues).
+  const { data: membership, error: mErr } = await supabase
     .from('memberships')
-    .select('role, orgs:org_id (id, name, slug, timezone, currency)')
+    .select('role, org_id')
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
 
-  if (error) {
-    console.error('[getCurrent] membership query failed', error);
-    throw new Error(`Membership query failed: ${error.message}`);
+  if (mErr) {
+    console.error('[getCurrent] memberships query failed', mErr);
+    throw new Error(`memberships query failed: ${mErr.message}`);
   }
-  if (!data) return null;
+  if (!membership) return null;
 
-  const membership = data as unknown as MembershipRow;
-  const orgRaw = Array.isArray(membership.orgs) ? membership.orgs[0] : membership.orgs;
-  if (!orgRaw) return null;
+  const { data: org, error: oErr } = await supabase
+    .from('orgs')
+    .select('id, name, slug, timezone, currency')
+    .eq('id', membership.org_id)
+    .maybeSingle();
+
+  if (oErr) {
+    console.error('[getCurrent] orgs query failed', oErr);
+    throw new Error(`orgs query failed: ${oErr.message}`);
+  }
+  if (!org) return null;
 
   return {
     user: { id: user.id, email: user.email ?? null },
-    org: orgRaw,
-    role: membership.role,
+    org,
+    role: membership.role as MemberRole,
   };
 });
 
