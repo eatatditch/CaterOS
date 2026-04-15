@@ -31,14 +31,18 @@ export default async function QuoteDetailPage({
     .eq('quote_id', id)
     .order('position');
 
-  const contactName = quote.contacts
-    ? [
-        (quote.contacts as unknown as { first_name: string | null }).first_name,
-        (quote.contacts as unknown as { last_name: string | null }).last_name,
-      ]
-        .filter(Boolean)
-        .join(' ')
+  const contact = quote.contacts as unknown as {
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+  const contactName = contact
+    ? [contact.first_name, contact.last_name].filter(Boolean).join(' ')
     : '';
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
   return (
     <div className="container max-w-4xl py-8">
@@ -55,9 +59,17 @@ export default async function QuoteDetailPage({
           quote.event_date ? ' · ' + formatDate(quote.event_date) : ''
         }`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge label={quote.status} tone={quoteStatusTone(quote.status)} />
-            <QuoteActions id={id} status={quote.status} />
+            <QuoteActions
+              id={id}
+              number={quote.number}
+              status={quote.status}
+              contactEmail={contact?.email ?? null}
+              contactName={contactName}
+              publicToken={quote.public_token ?? null}
+              appUrl={appUrl}
+            />
           </div>
         }
       />
