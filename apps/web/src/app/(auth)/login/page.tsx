@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { ChefHat } from 'lucide-react';
 import { LoginForm } from './login-form';
@@ -14,7 +15,9 @@ export default function LoginPage() {
         <p className="mb-6 text-sm text-muted-foreground">
           Log in to manage events, quotes, and your team.
         </p>
-        <LoginForm />
+        <Suspense fallback={<div className="h-64" />}>
+          <LoginForm />
+        </Suspense>
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}
           <Link href="/signup" className="font-medium text-primary hover:underline">

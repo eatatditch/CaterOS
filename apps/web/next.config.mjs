@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    typedRoutes: true,
-  },
   transpilePackages: ['@cateros/ui', '@cateros/lib', '@cateros/db'],
   images: {
     remotePatterns: [
