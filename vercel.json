@@ -3,5 +3,15 @@
   "framework": "nextjs",
   "buildCommand": "pnpm turbo run build --filter=@cateros/web",
   "installCommand": "pnpm install --frozen-lockfile",
-  "outputDirectory": "apps/web/.next"
+  "outputDirectory": "apps/web/.next",
+  "crons": [
+    {
+      "path": "/api/cron/charge-balances",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/sequences",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

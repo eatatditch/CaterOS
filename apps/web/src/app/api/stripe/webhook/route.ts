@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const invoiceId = session.metadata?.invoice_id;
+        const contactId = session.metadata?.contact_id;
         if (!invoiceId) break;
         if (session.payment_status !== 'paid') break;
 
@@ -53,6 +54,29 @@ export async function POST(request: NextRequest) {
           p_stripe_payment_intent_id: paymentIntentId,
           p_method: 'card',
         });
+
+        // Capture the saved Stripe customer + payment method on the contact
+        // so we can off-session charge the balance later.
+        const customerId =
+          typeof session.customer === 'string' ? session.customer : session.customer?.id;
+        if (contactId && customerId) {
+          try {
+            const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+            const pmId =
+              typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id;
+            if (pmId) {
+              await admin
+                .from('contacts')
+                .update({
+                  stripe_customer_id: customerId,
+                  stripe_default_payment_method_id: pmId,
+                })
+                .eq('id', contactId);
+            }
+          } catch (err) {
+            console.warn('[stripe webhook] could not save customer/pm', err);
+          }
+        }
         break;
       }
 

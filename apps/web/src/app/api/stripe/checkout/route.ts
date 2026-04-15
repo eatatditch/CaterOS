@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
         },
       ],
       customer_email: contact?.email ?? undefined,
+      // Save the customer + card for off-session balance auto-charge later.
+      customer_creation: 'always',
       success_url: `${appUrl}/quote/${quote?.public_token ?? ''}/deposit/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: quote?.public_token
         ? `${appUrl}/quote/${quote.public_token}/deposit?cancelled=1`
@@ -96,10 +98,14 @@ export async function POST(request: NextRequest) {
         type: 'deposit',
       },
       payment_intent_data: {
+        // Save the payment method so we can off-session charge the balance
+        // 24 hours before the event without bothering the client again.
+        setup_future_usage: 'off_session',
         metadata: {
           invoice_id: invoice.id,
           invoice_number: invoice.number,
           org_id: invoice.org_id,
+          contact_id: invoice.contact_id ?? '',
           type: 'deposit',
         },
         description: `Deposit for ${invoice.number}`,

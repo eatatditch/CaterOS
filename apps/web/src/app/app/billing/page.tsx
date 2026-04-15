@@ -19,6 +19,8 @@ export default async function BillingPage() {
   const settings = (org?.settings as Record<string, unknown> | null) ?? {};
   const depositRate =
     typeof settings.deposit_rate === 'number' ? settings.deposit_rate : 0.25;
+  const autoChargeEnabled =
+    typeof settings.auto_charge_enabled === 'boolean' ? settings.auto_charge_enabled : true;
 
   const hasStripe = Boolean(
     process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET,
@@ -80,14 +82,17 @@ export default async function BillingPage() {
             Percentage of the quote total charged as a deposit when the client accepts.
             Applied to every future accepted quote — existing invoices aren&apos;t affected.
           </p>
-          <DepositRateForm initial={depositRate} canEdit={canEdit} />
+          <DepositRateForm
+            initial={depositRate}
+            autoChargeEnabled={autoChargeEnabled}
+            canEdit={canEdit}
+          />
         </section>
 
         {/* Future */}
         <section className="rounded-lg border bg-card p-6 opacity-70">
           <h2 className="mb-2 font-semibold">Coming soon</h2>
           <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>• Auto-charge balance due on event date</li>
             <li>• Accept ACH transfers (lower fees)</li>
             <li>• Sync paid invoices to QuickBooks Online / Xero</li>
             <li>• 1099 / catering-tax reports</li>
