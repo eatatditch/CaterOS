@@ -12,7 +12,9 @@ import {
   Users,
   Utensils,
 } from 'lucide-react';
+import { redirect } from 'next/navigation';
 import type { Permission } from '@cateros/lib/auth';
+import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
 import { NavLink } from '@/components/nav-link';
 import { MobileNav, type MobileNavItem } from '@/components/mobile-nav';
@@ -45,6 +47,16 @@ const navConfig: NavEntry[] = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireCurrent();
+
+  const supabase = await createClient();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('first_name, last_name')
+    .eq('id', ctx.user.id)
+    .maybeSingle();
+  if (!profile?.first_name || !profile?.last_name) {
+    redirect('/welcome');
+  }
 
   const visibleNav = navConfig.filter((n) => !n.perm || ctx.can(n.perm));
 
