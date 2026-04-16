@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, Check, X } from 'lucide-react';
+import { Copy, Check, X, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { revokeInvitation } from '@/lib/actions/team';
+import { resendInvitation, revokeInvitation } from '@/lib/actions/team';
 
 export function InvitationRow({
   invitation,
@@ -20,12 +20,31 @@ export function InvitationRow({
   const expires = new Date(invitation.expires_at);
   const expiresIn = Math.ceil((expires.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
-  async function copyLink() {
-    const url = `${window.location.origin}/invite/${invitation.token}`;
+  async function copyLink(token: string = invitation.token) {
+    const url = `${window.location.origin}/invite/${token}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     toast.success('Link copied');
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function onResend() {
+    startTransition(async () => {
+      const res = await resendInvitation(invitation.id);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.emailed === 'invite' || res.emailed === 'magiclink') {
+        toast.success(`Invite resent to ${invitation.email}`);
+      } else {
+        toast.message('Couldn’t send email automatically — copying the link so you can share it manually.');
+        if (res.inviteUrl) {
+          await navigator.clipboard.writeText(res.inviteUrl);
+        }
+      }
+      router.refresh();
+    });
   }
 
   function onRevoke() {
@@ -49,8 +68,18 @@ export function InvitationRow({
         </div>
       </div>
       <div className="flex items-center gap-1">
+        {canManage ? (
+          <button
+            onClick={onResend}
+            disabled={isPending}
+            title="Resend invite email"
+            className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        ) : null}
         <button
-          onClick={copyLink}
+          onClick={() => copyLink()}
           title="Copy invite link"
           className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
