@@ -5,6 +5,7 @@ import {
   ClipboardList,
   CreditCard,
   Inbox,
+  Send,
   Users,
 } from 'lucide-react';
 import { formatMoney } from '@cateros/lib/money';
@@ -21,13 +22,10 @@ export default async function DashboardPage() {
   in30.setDate(in30.getDate() + 30);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  // Find the default pipeline's Lead stage id so we can fetch new inquiries
-  const { data: leadStage } = await supabase
-    .from('stages')
-    .select('id')
-    .eq('name', 'Lead')
-    .limit(1)
-    .maybeSingle();
+  const [{ data: leadStage }, { data: quoteSentStage }] = await Promise.all([
+    supabase.from('stages').select('id').eq('name', 'Lead').limit(1).maybeSingle(),
+    supabase.from('stages').select('id').eq('name', 'Quote Sent').limit(1).maybeSingle(),
+  ]);
 
   const [
     { count: openQuotes },
@@ -36,6 +34,7 @@ export default async function DashboardPage() {
     { data: revenueRows },
     { data: upcoming },
     { data: newInquiries },
+    { data: quoteSentDeals },
   ] = await Promise.all([
     supabase
       .from('quotes')
@@ -67,6 +66,17 @@ export default async function DashboardPage() {
             'id, title, amount_cents, currency, created_at, expected_close_date, contact_id, contacts:contact_id (first_name, last_name, email, phone)',
           )
           .eq('stage_id', leadStage.id)
+          .is('closed_at', null)
+          .order('created_at', { ascending: false })
+          .limit(8)
+      : Promise.resolve({ data: [] as never[] }),
+    quoteSentStage
+      ? supabase
+          .from('deals')
+          .select(
+            'id, title, amount_cents, currency, created_at, expected_close_date, contact_id, contacts:contact_id (first_name, last_name, email, phone)',
+          )
+          .eq('stage_id', quoteSentStage.id)
           .is('closed_at', null)
           .order('created_at', { ascending: false })
           .limit(8)
@@ -149,124 +159,177 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* New inquiries / unanswered leads */}
-        <div className="rounded-lg border bg-card">
-          <header className="flex items-center justify-between border-b px-6 py-4">
-            <div>
-              <h2 className="font-semibold">New inquiries</h2>
-              <p className="text-xs text-muted-foreground">
-                Inbound leads waiting for a response
-              </p>
-            </div>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </header>
-          {newInquiries && newInquiries.length > 0 ? (
-            <ul className="divide-y">
-              {newInquiries.map((d) => {
-                const contactRaw = Array.isArray(d.contacts) ? d.contacts[0] : d.contacts;
-                const contact = contactRaw as
-                  | {
-                      first_name: string | null;
-                      last_name: string | null;
-                      email: string | null;
-                      phone: string | null;
-                    }
-                  | null;
-                const name = contact
-                  ? [contact.first_name, contact.last_name].filter(Boolean).join(' ')
-                  : 'Unknown';
-                const responded = respondedIds.has(d.id);
-                return (
-                  <li key={d.id}>
-                    <Link
-                      href={`/app/deals/${d.id}`}
-                      className="flex items-start justify-between gap-4 p-4 hover:bg-accent/30"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate font-medium">{name || d.title}</span>
-                          {!responded ? (
-                            <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-destructive">
-                              Unanswered
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {contact?.email ?? contact?.phone ?? d.title}
-                        </div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(d.created_at), { addSuffix: true })}
-                          {d.expected_close_date
-                            ? ` · event ${new Date(d.expected_close_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                            : ''}
-                        </div>
-                      </div>
-                      {d.amount_cents > 0 ? (
-                        <div className="shrink-0 text-sm font-medium">
-                          {formatMoney(d.amount_cents, d.currency)}
-                        </div>
-                      ) : null}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="p-6 text-sm text-muted-foreground">
+        <DealListSection
+          title="New inquiries"
+          subtitle="Inbound leads waiting for a response"
+          icon={<Users className="h-4 w-4 text-muted-foreground" />}
+          deals={newInquiries ?? []}
+          respondedIds={respondedIds}
+          showUnanswered
+          currency={ctx.org.currency}
+          emptyText={
+            <>
               No new leads. When someone submits your{' '}
               <Link href="/app/marketing/forms" className="text-primary hover:underline">
                 web form
               </Link>{' '}
               they&apos;ll show up here.
-            </p>
-          )}
-        </div>
+            </>
+          }
+        />
 
-        {/* Upcoming confirmed events */}
-        <div className="rounded-lg border bg-card">
-          <header className="flex items-center justify-between border-b px-6 py-4">
-            <div>
-              <h2 className="font-semibold">Upcoming events</h2>
-              <p className="text-xs text-muted-foreground">Confirmed and in-progress</p>
-            </div>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </header>
-          {upcoming && upcoming.length > 0 ? (
-            <ul className="divide-y">
-              {upcoming.map((e) => (
-                <li key={e.id}>
-                  <Link
-                    href={`/app/events/${e.id}`}
-                    className="flex items-center justify-between p-4 hover:bg-accent/30"
-                  >
-                    <div>
-                      <div className="font-medium">{e.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(e.starts_at).toLocaleString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
-                        {e.venue_name ? ` · ${e.venue_name}` : ''} · {e.headcount} guests
-                      </div>
-                    </div>
-                    <StatusBadge label={e.status} tone={eventStatusTone(e.status)} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="p-6 text-sm text-muted-foreground">
-              No confirmed events yet.{' '}
-              <Link href="/app/events/new" className="text-primary hover:underline">
-                Create one
-              </Link>
-              .
-            </p>
-          )}
-        </div>
+        {/* Quote sent — awaiting response */}
+        <DealListSection
+          title="Quote sent"
+          subtitle="Waiting on client response"
+          icon={<Send className="h-4 w-4 text-muted-foreground" />}
+          deals={quoteSentDeals ?? []}
+          currency={ctx.org.currency}
+          emptyText="No quotes sent right now."
+        />
       </div>
+
+      {/* Upcoming confirmed events */}
+      <div className="mt-6 rounded-lg border bg-card">
+        <header className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h2 className="font-semibold">Upcoming events</h2>
+            <p className="text-xs text-muted-foreground">Confirmed and in-progress</p>
+          </div>
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+        </header>
+        {upcoming && upcoming.length > 0 ? (
+          <ul className="divide-y">
+            {upcoming.map((e) => (
+              <li key={e.id}>
+                <Link
+                  href={`/app/events/${e.id}`}
+                  className="flex items-center justify-between p-4 hover:bg-accent/30"
+                >
+                  <div>
+                    <div className="font-medium">{e.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(e.starts_at).toLocaleString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                      {e.venue_name ? ` · ${e.venue_name}` : ''} · {e.headcount} guests
+                    </div>
+                  </div>
+                  <StatusBadge label={e.status} tone={eventStatusTone(e.status)} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="p-6 text-sm text-muted-foreground">
+            No confirmed events yet.{' '}
+            <Link href="/app/events/new" className="text-primary hover:underline">
+              Create one
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type DealRow = {
+  id: string;
+  title: string;
+  amount_cents: number;
+  currency: string;
+  created_at: string;
+  expected_close_date: string | null;
+  contacts: unknown;
+};
+
+function DealListSection({
+  title,
+  subtitle,
+  icon,
+  deals,
+  respondedIds,
+  showUnanswered,
+  currency,
+  emptyText,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  deals: DealRow[];
+  respondedIds?: Set<string>;
+  showUnanswered?: boolean;
+  currency: string;
+  emptyText: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border bg-card">
+      <header className="flex items-center justify-between border-b px-6 py-4">
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        {icon}
+      </header>
+      {deals.length > 0 ? (
+        <ul className="divide-y">
+          {deals.map((d) => {
+            const contactRaw = Array.isArray(d.contacts) ? d.contacts[0] : d.contacts;
+            const contact = contactRaw as
+              | {
+                  first_name: string | null;
+                  last_name: string | null;
+                  email: string | null;
+                  phone: string | null;
+                }
+              | null;
+            const name = contact
+              ? [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+              : 'Unknown';
+            const unanswered = showUnanswered && respondedIds && !respondedIds.has(d.id);
+            return (
+              <li key={d.id}>
+                <Link
+                  href={`/app/deals/${d.id}`}
+                  className="flex items-start justify-between gap-4 p-4 hover:bg-accent/30"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{name || d.title}</span>
+                      {unanswered ? (
+                        <span className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-destructive">
+                          Unanswered
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {contact?.email ?? contact?.phone ?? d.title}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {formatDistanceToNow(new Date(d.created_at), { addSuffix: true })}
+                      {d.expected_close_date
+                        ? ` · event ${new Date(d.expected_close_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                        : ''}
+                    </div>
+                  </div>
+                  {d.amount_cents > 0 ? (
+                    <div className="shrink-0 text-sm font-medium">
+                      {formatMoney(d.amount_cents, d.currency)}
+                    </div>
+                  ) : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="p-6 text-sm text-muted-foreground">{emptyText}</p>
+      )}
     </div>
   );
 }

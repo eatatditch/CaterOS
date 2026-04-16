@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, MessageSquare, Users } from 'lucide-react';
 import { formatMoney } from '@cateros/lib/money';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
@@ -28,6 +28,9 @@ export default async function DealDetailPage({
 
   if (!deal) notFound();
 
+  const stageName = (deal.stages as unknown as { name: string } | null)?.name ?? '';
+  const isLead = stageName === 'Lead';
+
   const [
     { data: stages },
     { data: activities },
@@ -53,6 +56,8 @@ export default async function DealDetailPage({
       : Promise.resolve({ data: null }),
   ]);
 
+  const customFields = (deal.custom_fields ?? {}) as Record<string, unknown>;
+
   return (
     <div className="container py-8">
       <Link
@@ -63,25 +68,34 @@ export default async function DealDetailPage({
       </Link>
       <PageHeader
         title={deal.title}
-        description={`${(deal.stages as unknown as { name: string } | null)?.name ?? ''} · ${formatMoney(deal.amount_cents, deal.currency)}`}
+        description={`${stageName} · ${formatMoney(deal.amount_cents, deal.currency)}`}
         actions={<DealHeaderActions dealId={deal.id} dealTitle={deal.title} />}
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <section className="rounded-lg border bg-card p-6">
-            <h2 className="mb-4 font-semibold">Deal details</h2>
-            <DealForm
-              initial={deal}
-              pipelineId={deal.pipeline_id}
-              stages={stages ?? []}
-              contacts={(contacts ?? []).map((c) => ({
-                id: c.id,
-                label: [c.first_name, c.last_name].filter(Boolean).join(' '),
-              }))}
-              companies={companies ?? []}
+          {isLead ? (
+            <InquiryCard
+              contact={linkedContact}
+              deal={deal}
+              customFields={customFields}
+              currency={deal.currency}
             />
-          </section>
+          ) : (
+            <section className="rounded-lg border bg-card p-6">
+              <h2 className="mb-4 font-semibold">Deal details</h2>
+              <DealForm
+                initial={deal}
+                pipelineId={deal.pipeline_id}
+                stages={stages ?? []}
+                contacts={(contacts ?? []).map((c) => ({
+                  id: c.id,
+                  label: [c.first_name, c.last_name].filter(Boolean).join(' '),
+                }))}
+                companies={companies ?? []}
+              />
+            </section>
+          )}
 
           {linkedContact ? (
             <ContactEmailPanel
@@ -133,6 +147,99 @@ export default async function DealDetailPage({
           ) : null}
         </aside>
       </div>
+    </div>
+  );
+}
+
+function InquiryCard({
+  contact,
+  deal,
+  customFields,
+  currency,
+}: {
+  contact: { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
+  deal: { title: string; expected_close_date: string | null; amount_cents: number; source: string | null; created_at: string };
+  customFields: Record<string, unknown>;
+  currency: string;
+}) {
+  const headcount = Number(customFields.headcount) || 0;
+  const serviceType = String(customFields.service_type_raw ?? '').replace(/_/g, ' ') || null;
+  const eventTime = String(customFields.event_time ?? '') || null;
+  const message = String(customFields.message ?? '') || null;
+  const contactName = contact
+    ? [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+    : null;
+  const eventDate = deal.expected_close_date
+    ? new Date(deal.expected_close_date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
+
+  return (
+    <section className="rounded-lg border bg-card">
+      <header className="border-b px-6 py-4">
+        <h2 className="font-semibold">Inquiry details</h2>
+        <p className="text-xs text-muted-foreground">
+          Submitted {new Date(deal.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          {deal.source ? ` via ${deal.source.replace('_', ' ')}` : ''}
+        </p>
+      </header>
+      <div className="divide-y">
+        {/* Contact info */}
+        <div className="grid gap-x-8 gap-y-3 px-6 py-4 sm:grid-cols-2">
+          <InfoRow label="Name" value={contactName} />
+          <InfoRow label="Email" value={contact?.email} />
+          <InfoRow label="Phone" value={contact?.phone} />
+          {deal.amount_cents > 0 ? (
+            <InfoRow label="Estimated budget" value={formatMoney(deal.amount_cents, currency)} />
+          ) : null}
+        </div>
+
+        {/* Event details */}
+        <div className="grid gap-x-8 gap-y-3 px-6 py-4 sm:grid-cols-2">
+          <InfoRow label="Event date" value={eventDate} icon={<Calendar className="h-3.5 w-3.5" />} />
+          {eventTime ? <InfoRow label="Event time" value={eventTime} /> : null}
+          {headcount > 0 ? (
+            <InfoRow label="Guest count" value={`${headcount} guests`} icon={<Users className="h-3.5 w-3.5" />} />
+          ) : null}
+          {serviceType ? (
+            <InfoRow label="Service type" value={serviceType} icon={<MapPin className="h-3.5 w-3.5" />} />
+          ) : null}
+        </div>
+
+        {/* Message */}
+        {message ? (
+          <div className="px-6 py-4">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <MessageSquare className="h-3.5 w-3.5" /> Message
+            </div>
+            <p className="whitespace-pre-wrap text-sm">{message}</p>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string | null | undefined;
+  icon?: React.ReactNode;
+}) {
+  if (!value) return null;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {icon} {label}
+      </div>
+      <div className="mt-0.5 text-sm">{value}</div>
     </div>
   );
 }

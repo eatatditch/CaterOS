@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { StatusBadge, eventStatusTone } from '@/components/ui/status-badge';
 import { EventForm } from '../event-form';
 import { DeleteEventButton } from '@/components/delete-event-button';
+import { BeoSection } from './beo-section';
 
 export default async function EventDetailPage({
   params,
@@ -19,11 +20,29 @@ export default async function EventDetailPage({
   const { data: event } = await supabase.from('events').select('*').eq('id', id).maybeSingle();
   if (!event) notFound();
 
-  const { data: contacts } = await supabase
-    .from('contacts')
-    .select('id, first_name, last_name')
-    .order('last_name')
-    .limit(500);
+  const [
+    { data: contacts },
+    { data: beos },
+    { data: quoteItems },
+  ] = await Promise.all([
+    supabase
+      .from('contacts')
+      .select('id, first_name, last_name')
+      .order('last_name')
+      .limit(500),
+    supabase
+      .from('beos')
+      .select('id, version, title, status, notes, content, generated_at, finalized_at')
+      .eq('event_id', id)
+      .order('version', { ascending: false }),
+    event.quote_id
+      ? supabase
+          .from('quote_items')
+          .select('name, quantity')
+          .eq('quote_id', event.quote_id)
+          .order('position')
+      : Promise.resolve({ data: [] as { name: string; quantity: number }[] }),
+  ]);
 
   const starts = new Date(event.starts_at);
   const ends = new Date(event.ends_at);
@@ -90,16 +109,33 @@ export default async function EventDetailPage({
         </div>
       </div>
 
-      <section className="rounded-lg border bg-card p-6">
-        <h2 className="mb-4 font-semibold">Details</h2>
-        <EventForm
-          initial={event}
-          contacts={(contacts ?? []).map((c) => ({
-            id: c.id,
-            label: [c.first_name, c.last_name].filter(Boolean).join(' '),
+      <div className="space-y-6">
+        <BeoSection
+          eventId={event.id}
+          beos={(beos ?? []).map((b) => ({
+            ...b,
+            title: b.title ?? null,
+            notes: b.notes ?? null,
+            content: (b.content ?? {}) as Record<string, string>,
+            finalized_at: b.finalized_at ?? null,
+          }))}
+          menuItems={(quoteItems ?? []).map((qi) => ({
+            name: qi.name,
+            quantity: qi.quantity,
           }))}
         />
-      </section>
+
+        <section className="rounded-lg border bg-card p-6">
+          <h2 className="mb-4 font-semibold">Details</h2>
+          <EventForm
+            initial={event}
+            contacts={(contacts ?? []).map((c) => ({
+              id: c.id,
+              label: [c.first_name, c.last_name].filter(Boolean).join(' '),
+            }))}
+          />
+        </section>
+      </div>
     </div>
   );
 }

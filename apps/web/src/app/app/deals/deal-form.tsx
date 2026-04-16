@@ -81,7 +81,7 @@ export function DealForm({
             className={inputCls}
           />
         </Field>
-        <Field label="Expected close" htmlFor="expected_close_date">
+        <Field label="Event date" htmlFor="expected_close_date">
           <input
             id="expected_close_date"
             name="expected_close_date"
