@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
+import { getConnectionForOrg, sendEmail } from '@/lib/gmail/client';
 
 const roleEnum = z.enum(['owner', 'manager', 'sales', 'ops', 'driver', 'read_only']);
 
@@ -23,6 +24,77 @@ function managerGate(role: string) {
   return null;
 }
 
+function appBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  );
+}
+
+// Sends the invite email via the org's connected Gmail. Falls back to Supabase's
+// built-in invite mailer if Gmail isn't connected; if *both* fail we return a
+// null channel and the caller can show the copy-link UX.
+async function deliverInviteEmail(opts: {
+  orgId: string;
+  orgName: string;
+  inviterName: string | null;
+  email: string;
+  role: string;
+  token: string;
+}): Promise<'gmail' | 'supabase' | null> {
+  const inviteUrl = `${appBaseUrl()}/invite/${opts.token}`;
+  const roleLabel = opts.role.replace('_', ' ');
+  const inviter = opts.inviterName ?? 'Your teammate';
+  const subject = `You've been invited to ${opts.orgName} on CaterOS`;
+  const textBody = [
+    `${inviter} invited you to join ${opts.orgName} on CaterOS as ${roleLabel}.`,
+    '',
+    'Accept the invite and set your password:',
+    inviteUrl,
+    '',
+    "If you didn't expect this email, you can safely ignore it.",
+  ].join('\n');
+  const htmlBody = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; color: #111;">
+      <h2 style="margin: 0 0 12px;">You're invited to ${opts.orgName}</h2>
+      <p style="margin: 0 0 16px; color: #555;">
+        ${inviter} invited you to join <strong>${opts.orgName}</strong> on CaterOS as <strong>${roleLabel}</strong>.
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="${inviteUrl}" style="display:inline-block; background:#0f766e; color:#fff; padding:12px 20px; border-radius:6px; text-decoration:none; font-weight:500;">
+          Accept invite & set password
+        </a>
+      </p>
+      <p style="margin: 16px 0 0; color:#888; font-size:12px;">
+        Or paste this link into your browser:<br><span style="color:#555;">${inviteUrl}</span>
+      </p>
+    </div>
+  `;
+
+  const connection = await getConnectionForOrg(opts.orgId);
+  if (connection) {
+    try {
+      await sendEmail(connection, { to: opts.email, subject, textBody, htmlBody });
+      return 'gmail';
+    } catch (err) {
+      console.warn('[invite] Gmail send failed, falling back', err);
+    }
+  }
+
+  // Supabase fallback — only works for new emails (not existing auth users).
+  try {
+    const admin = createAdminClient();
+    await admin.auth.admin.inviteUserByEmail(opts.email, {
+      redirectTo: inviteUrl,
+      data: { org_name: opts.orgName, invite_token: opts.token },
+    });
+    return 'supabase';
+  } catch (err) {
+    console.warn('[invite] Supabase invite fallback failed', err);
+    return null;
+  }
+}
+
 const inviteSchema = z.object({
   email: z.string().trim().email(),
   role: roleEnum,
@@ -36,22 +108,12 @@ export async function inviteMember(formData: FormData) {
   const parsed = inviteSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
 
-  // Only owners may invite owners
   if (parsed.data.role === 'owner' && ctx.role !== 'owner') {
     return { error: 'Only owners may invite owners.' };
   }
 
   const supabase = await createClient();
   const admin = createAdminClient();
-
-  // Is this email already a member?
-  const { data: existing } = await admin
-    .from('memberships')
-    .select('user_id, profiles:user_id (id)')
-    .eq('org_id', ctx.org.id);
-  // Not checking against email directly here since memberships lacks email; we'll rely on
-  // the invitations unique-per-org constraint and handle_new_user trigger linking on signup.
-
   const token = randToken();
 
   const { error } = await supabase.from('invitations').insert({
@@ -72,25 +134,24 @@ export async function inviteMember(formData: FormData) {
     return { error: error.message };
   }
 
-  // Send invitation email via Supabase Auth invite flow (creates user shell if new,
-  // emails a magic link to /signup with metadata).
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const { data: inviter } = await admin
+    .from('profiles')
+    .select('full_name')
+    .eq('id', ctx.user.id)
+    .maybeSingle();
 
-  try {
-    await admin.auth.admin.inviteUserByEmail(parsed.data.email, {
-      redirectTo: `${appUrl}/invite/${token}`,
-      data: { org_name: ctx.org.name, invite_token: token },
-    });
-  } catch (e) {
-    console.warn('[inviteMember] inviteUserByEmail failed', e);
-    // Non-fatal — the invitation row is still written; admin can share the link manually.
-  }
+  const channel = await deliverInviteEmail({
+    orgId: ctx.org.id,
+    orgName: ctx.org.name,
+    inviterName: inviter?.full_name ?? null,
+    email: parsed.data.email,
+    role: parsed.data.role,
+    token,
+  });
 
-  const inviteUrl = `${appUrl}/invite/${token}`;
+  const inviteUrl = `${appBaseUrl()}/invite/${token}`;
   revalidatePath('/app/settings/team');
-  return { ok: true, inviteUrl };
+  return { ok: true, inviteUrl, emailed: channel };
 }
 
 export async function resendInvitation(id: string) {
@@ -109,7 +170,6 @@ export async function resendInvitation(id: string) {
   if (!existing) return { error: 'Invitation not found.' };
   if (existing.accepted_at) return { error: 'This invitation has already been accepted.' };
 
-  // Rotate token so any leaked old link is invalid; extend expiry by 14 days.
   const newToken = randToken();
   const newExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -119,36 +179,24 @@ export async function resendInvitation(id: string) {
     .eq('id', id);
   if (upErr) return { error: upErr.message };
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-  const inviteUrl = `${appUrl}/invite/${newToken}`;
+  const { data: inviter } = await admin
+    .from('profiles')
+    .select('full_name')
+    .eq('id', ctx.user.id)
+    .maybeSingle();
 
-  // Try Supabase-hosted invite email first. If the email already exists as an
-  // auth user (because the original invite created a shell), fall back to a
-  // magic-link so the email still goes out.
-  let emailed: 'invite' | 'magiclink' | null = null;
-  try {
-    await admin.auth.admin.inviteUserByEmail(existing.email, {
-      redirectTo: inviteUrl,
-      data: { org_name: ctx.org.name, invite_token: newToken },
-    });
-    emailed = 'invite';
-  } catch {
-    try {
-      await admin.auth.admin.generateLink({
-        type: 'magiclink',
-        email: existing.email,
-        options: { redirectTo: inviteUrl },
-      });
-      emailed = 'magiclink';
-    } catch (e) {
-      console.warn('[resendInvitation] both invite + magiclink failed', e);
-    }
-  }
+  const channel = await deliverInviteEmail({
+    orgId: ctx.org.id,
+    orgName: ctx.org.name,
+    inviterName: inviter?.full_name ?? null,
+    email: existing.email,
+    role: existing.role,
+    token: newToken,
+  });
 
+  const inviteUrl = `${appBaseUrl()}/invite/${newToken}`;
   revalidatePath('/app/settings/team');
-  return { ok: true, inviteUrl, emailed };
+  return { ok: true, inviteUrl, emailed: channel };
 }
 
 export async function revokeInvitation(id: string) {

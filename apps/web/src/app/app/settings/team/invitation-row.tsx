@@ -35,10 +35,14 @@ export function InvitationRow({
         toast.error(res.error);
         return;
       }
-      if (res.emailed === 'invite' || res.emailed === 'magiclink') {
+      if (res.emailed === 'gmail') {
+        toast.success(`Invite resent to ${invitation.email} via Gmail`);
+      } else if (res.emailed === 'supabase') {
         toast.success(`Invite resent to ${invitation.email}`);
       } else {
-        toast.message('Couldn’t send email automatically — copying the link so you can share it manually.');
+        toast.message(
+          'Couldn’t send email automatically — link copied so you can share it manually. Connect Gmail in Integrations for auto-send.',
+        );
         if (res.inviteUrl) {
           await navigator.clipboard.writeText(res.inviteUrl);
         }
