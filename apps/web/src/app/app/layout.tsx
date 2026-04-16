@@ -12,6 +12,7 @@ import {
   Users,
   Utensils,
 } from 'lucide-react';
+import type { Permission } from '@cateros/lib/auth';
 import { requireCurrent } from '@/lib/auth/current';
 import { NavLink } from '@/components/nav-link';
 import { MobileNav, type MobileNavItem } from '@/components/mobile-nav';
@@ -21,24 +22,33 @@ export const dynamic = 'force-dynamic';
 
 // Each entry pairs the href/label with a pre-rendered icon JSX element so it
 // can cross the RSC → Client Component boundary (functions can't).
-const navConfig = [
+type NavEntry = {
+  href: string;
+  label: string;
+  Icon: typeof LayoutDashboard;
+  perm?: Permission;
+};
+
+const navConfig: NavEntry[] = [
   { href: '/app', label: 'Dashboard', Icon: LayoutDashboard },
-  { href: '/app/contacts', label: 'Contacts', Icon: Users },
-  { href: '/app/pipeline', label: 'Pipeline', Icon: Kanban },
-  { href: '/app/menus', label: 'Menus', Icon: Utensils },
-  { href: '/app/quotes', label: 'Quotes', Icon: ClipboardList },
-  { href: '/app/events', label: 'Events', Icon: Calendar },
-  { href: '/app/dispatch', label: 'Dispatch', Icon: Truck },
-  { href: '/app/invoices', label: 'Invoices', Icon: Receipt },
-  { href: '/app/billing', label: 'Billing', Icon: CreditCard },
-  { href: '/app/marketing', label: 'Marketing', Icon: Mail },
+  { href: '/app/contacts', label: 'Contacts', Icon: Users, perm: 'contacts.manage' },
+  { href: '/app/pipeline', label: 'Pipeline', Icon: Kanban, perm: 'deals.manage' },
+  { href: '/app/menus', label: 'Menus', Icon: Utensils, perm: 'menus.manage' },
+  { href: '/app/quotes', label: 'Quotes', Icon: ClipboardList, perm: 'quotes.manage' },
+  { href: '/app/events', label: 'Events', Icon: Calendar, perm: 'events.manage' },
+  { href: '/app/dispatch', label: 'Dispatch', Icon: Truck, perm: 'dispatch.manage' },
+  { href: '/app/invoices', label: 'Invoices', Icon: Receipt, perm: 'invoices.manage' },
+  { href: '/app/billing', label: 'Billing', Icon: CreditCard, perm: 'invoices.charge' },
+  { href: '/app/marketing', label: 'Marketing', Icon: Mail, perm: 'marketing.manage' },
   { href: '/app/settings', label: 'Settings', Icon: Settings },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireCurrent();
 
-  const mobileItems: MobileNavItem[] = navConfig.map(({ href, label, Icon }) => ({
+  const visibleNav = navConfig.filter((n) => !n.perm || ctx.can(n.perm));
+
+  const mobileItems: MobileNavItem[] = visibleNav.map(({ href, label, Icon }) => ({
     href,
     label,
     icon: <Icon className="h-4 w-4" />,
@@ -65,7 +75,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {navConfig.map(({ href, label, Icon }) => (
+          {visibleNav.map(({ href, label, Icon }) => (
             <NavLink
               key={href}
               href={href}
