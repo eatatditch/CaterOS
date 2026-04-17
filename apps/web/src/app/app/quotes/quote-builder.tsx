@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeQuoteTotals, formatMoney } from '@cateros/lib/money';
 import { createQuote } from '@/lib/actions/quotes';
@@ -14,11 +14,6 @@ import {
   buttonOutlineCls,
 } from '@/components/ui/field';
 
-/**
- * Controlled numeric input that doesn't fight you while typing. Holds its
- * own text state, only commits the parsed number to `onChange` on blur.
- * Syncs back to external value changes only when the input is not focused.
- */
 function NumericInput({
   value,
   onChange,
@@ -62,12 +57,36 @@ function NumericInput({
   );
 }
 
-type MenuItem = {
+export type ModifierOption = {
+  id: string;
+  name: string;
+  price_delta_cents: number;
+};
+
+export type ModifierGroupDef = {
+  group_id: string;
+  name: string;
+  is_required: boolean;
+  min_selections: number;
+  max_selections: number;
+  options: ModifierOption[];
+};
+
+export type MenuItemForQuote = {
   id: string;
   name: string;
   description: string | null;
   unit_price_cents: number;
   unit: string;
+  modifier_groups: ModifierGroupDef[];
+};
+
+type SelectedModifier = {
+  group_id: string;
+  group_name: string;
+  modifier_id: string;
+  name: string;
+  price_delta_cents: number;
 };
 
 type LineItem = {
@@ -76,7 +95,11 @@ type LineItem = {
   name: string;
   description?: string;
   quantity: number;
-  unit_price_cents: number;
+  base_price_cents: number; // the package price before modifiers
+  unit_price_cents: number; // base + sum(selected modifier deltas)
+  modifier_groups: ModifierGroupDef[];
+  selected_modifiers: SelectedModifier[];
+  expanded: boolean;
 };
 
 export type InquiryPrefill = {
@@ -102,7 +125,7 @@ export function QuoteBuilder({
 }: {
   currency: string;
   contacts: { id: string; label: string }[];
-  menuItems: MenuItem[];
+  menuItems: MenuItemForQuote[];
   deals?: { id: string; label: string; subtitle: string }[];
   locations?: { id: string; name: string }[];
   prefill?: InquiryPrefill | null;
@@ -146,7 +169,11 @@ export function QuoteBuilder({
         name: mi.name,
         description: mi.description ?? '',
         quantity: headcount || 1,
+        base_price_cents: mi.unit_price_cents,
         unit_price_cents: mi.unit_price_cents,
+        modifier_groups: mi.modifier_groups,
+        selected_modifiers: [],
+        expanded: mi.modifier_groups.length > 0,
       },
     ]);
   }
@@ -154,7 +181,17 @@ export function QuoteBuilder({
   function addBlank() {
     setItems((prev) => [
       ...prev,
-      { key: uid(), name: '', description: '', quantity: 1, unit_price_cents: 0 },
+      {
+        key: uid(),
+        name: '',
+        description: '',
+        quantity: 1,
+        base_price_cents: 0,
+        unit_price_cents: 0,
+        modifier_groups: [],
+        selected_modifiers: [],
+        expanded: false,
+      },
     ]);
   }
 
@@ -166,10 +203,81 @@ export function QuoteBuilder({
     setItems((prev) => prev.filter((it) => it.key !== key));
   }
 
+  function toggleModifier(itemKey: string, group: ModifierGroupDef, modifier: ModifierOption) {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== itemKey) return it;
+        const already = it.selected_modifiers.find(
+          (s) => s.group_id === group.group_id && s.modifier_id === modifier.id,
+        );
+        let next: SelectedModifier[];
+        if (already) {
+          next = it.selected_modifiers.filter(
+            (s) => !(s.group_id === group.group_id && s.modifier_id === modifier.id),
+          );
+        } else {
+          const groupSelections = it.selected_modifiers.filter((s) => s.group_id === group.group_id);
+          if (group.max_selections === 1) {
+            // single-select: replace any existing
+            next = [
+              ...it.selected_modifiers.filter((s) => s.group_id !== group.group_id),
+              {
+                group_id: group.group_id,
+                group_name: group.name,
+                modifier_id: modifier.id,
+                name: modifier.name,
+                price_delta_cents: modifier.price_delta_cents,
+              },
+            ];
+          } else if (groupSelections.length >= group.max_selections) {
+            toast.error(`Max ${group.max_selections} selection${group.max_selections === 1 ? '' : 's'} for ${group.name}`);
+            return it;
+          } else {
+            next = [
+              ...it.selected_modifiers,
+              {
+                group_id: group.group_id,
+                group_name: group.name,
+                modifier_id: modifier.id,
+                name: modifier.name,
+                price_delta_cents: modifier.price_delta_cents,
+              },
+            ];
+          }
+        }
+        const deltaSum = next.reduce((s, m) => s + m.price_delta_cents, 0);
+        return {
+          ...it,
+          selected_modifiers: next,
+          unit_price_cents: it.base_price_cents + deltaSum,
+        };
+      }),
+    );
+  }
+
+  function validateItems(): string | null {
+    for (const it of items) {
+      if (!it.name.trim()) return 'Every line item needs a name.';
+      for (const g of it.modifier_groups) {
+        const count = it.selected_modifiers.filter((s) => s.group_id === g.group_id).length;
+        if (g.is_required && count < g.min_selections) {
+          return `"${it.name}" requires ${g.min_selections} selection${g.min_selections === 1 ? '' : 's'} for ${g.name}.`;
+        }
+      }
+    }
+    return null;
+  }
+
   function onSubmit() {
     setError(null);
     if (!items.length) {
       setError('Add at least one line item.');
+      return;
+    }
+    const problem = validateItems();
+    if (problem) {
+      setError(problem);
+      toast.error(problem);
       return;
     }
     startTransition(async () => {
@@ -190,6 +298,13 @@ export function QuoteBuilder({
           quantity: it.quantity,
           unit_price_cents: it.unit_price_cents,
           menu_item_id: it.menu_item_id ?? null,
+          modifiers: it.selected_modifiers.map((s) => ({
+            group_id: s.group_id,
+            group_name: s.group_name,
+            modifier_id: s.modifier_id,
+            name: s.name,
+            price_delta_cents: s.price_delta_cents,
+          })),
         })),
       });
       if (res?.error) {
@@ -219,13 +334,9 @@ export function QuoteBuilder({
                   const next = e.target.value;
                   setDealId(next);
                   if (next) {
-                    const d = deals.find((x) => x.id === next);
-                    if (d) {
-                      // navigate to self with ?deal=... so server prefill re-runs
-                      const params = new URLSearchParams(window.location.search);
-                      params.set('deal', next);
-                      window.location.search = params.toString();
-                    }
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('deal', next);
+                    window.location.search = params.toString();
                   }
                 }}
                 className={selectCls}
@@ -340,6 +451,7 @@ export function QuoteBuilder({
                 {menuItems.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} — {formatMoney(m.unit_price_cents, currency)}
+                    {m.modifier_groups.length > 0 ? ' · customizable' : ''}
                   </option>
                 ))}
               </select>
@@ -356,58 +468,14 @@ export function QuoteBuilder({
           ) : (
             <div className="space-y-3">
               {items.map((it) => (
-                <div
+                <LineItemRow
                   key={it.key}
-                  className="grid items-start gap-2 rounded-md border p-3 md:grid-cols-[1fr_90px_120px_100px_40px]"
-                >
-                  <div>
-                    <input
-                      value={it.name}
-                      onChange={(e) => updateItem(it.key, { name: e.target.value })}
-                      placeholder="Item name"
-                      className={`${inputCls} h-9`}
-                    />
-                    <input
-                      value={it.description ?? ''}
-                      onChange={(e) => updateItem(it.key, { description: e.target.value })}
-                      placeholder="Description (optional)"
-                      className={`${inputCls} mt-2 h-8 text-xs`}
-                    />
-                  </div>
-                  <NumericInput
-                    min="1"
-                    value={it.quantity}
-                    onChange={(n) =>
-                      updateItem(it.key, { quantity: Math.max(1, Math.floor(n) || 1) })
-                    }
-                    className={`${inputCls} h-9`}
-                    aria-label="Quantity"
-                  />
-                  <NumericInput
-                    min="0"
-                    step="0.01"
-                    value={it.unit_price_cents / 100}
-                    onChange={(dollars) =>
-                      updateItem(it.key, {
-                        unit_price_cents: Math.round(dollars * 100),
-                      })
-                    }
-                    className={`${inputCls} h-9`}
-                    aria-label="Unit price"
-                    placeholder="0.00"
-                  />
-                  <div className="px-2 py-2 text-right text-sm font-medium">
-                    {formatMoney(it.quantity * it.unit_price_cents, currency)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(it.key)}
-                    className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    aria-label="Remove"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                  item={it}
+                  currency={currency}
+                  onUpdate={(patch) => updateItem(it.key, patch)}
+                  onRemove={() => removeItem(it.key)}
+                  onToggleModifier={(g, m) => toggleModifier(it.key, g, m)}
+                />
               ))}
             </div>
           )}
@@ -506,6 +574,146 @@ export function QuoteBuilder({
           </button>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function LineItemRow({
+  item,
+  currency,
+  onUpdate,
+  onRemove,
+  onToggleModifier,
+}: {
+  item: LineItem;
+  currency: string;
+  onUpdate: (patch: Partial<LineItem>) => void;
+  onRemove: () => void;
+  onToggleModifier: (g: ModifierGroupDef, m: ModifierOption) => void;
+}) {
+  const hasGroups = item.modifier_groups.length > 0;
+
+  return (
+    <div className="rounded-md border">
+      <div className="grid items-start gap-2 p-3 md:grid-cols-[1fr_90px_120px_100px_40px]">
+        <div>
+          <input
+            value={item.name}
+            onChange={(e) => onUpdate({ name: e.target.value })}
+            placeholder="Item name"
+            className={`${inputCls} h-9`}
+          />
+          <input
+            value={item.description ?? ''}
+            onChange={(e) => onUpdate({ description: e.target.value })}
+            placeholder="Description (optional)"
+            className={`${inputCls} mt-2 h-8 text-xs`}
+          />
+          {hasGroups ? (
+            <button
+              type="button"
+              onClick={() => onUpdate({ expanded: !item.expanded })}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              {item.expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {item.selected_modifiers.length > 0
+                ? `${item.selected_modifiers.length} selection${item.selected_modifiers.length === 1 ? '' : 's'}`
+                : 'Customize'}
+            </button>
+          ) : null}
+        </div>
+        <NumericInput
+          min="1"
+          value={item.quantity}
+          onChange={(n) => onUpdate({ quantity: Math.max(1, Math.floor(n) || 1) })}
+          className={`${inputCls} h-9`}
+          aria-label="Quantity"
+        />
+        <NumericInput
+          min="0"
+          step="0.01"
+          value={item.unit_price_cents / 100}
+          onChange={(dollars) =>
+            onUpdate({
+              base_price_cents: Math.round(dollars * 100),
+              unit_price_cents: Math.round(dollars * 100) + item.selected_modifiers.reduce((s, m) => s + m.price_delta_cents, 0),
+            })
+          }
+          className={`${inputCls} h-9`}
+          aria-label="Unit price"
+          placeholder="0.00"
+        />
+        <div className="px-2 py-2 text-right text-sm font-medium">
+          {formatMoney(item.quantity * item.unit_price_cents, currency)}
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          aria-label="Remove"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      {hasGroups && item.expanded ? (
+        <div className="space-y-3 border-t bg-muted/20 p-3">
+          {item.modifier_groups.map((g) => {
+            const selectedCount = item.selected_modifiers.filter((s) => s.group_id === g.group_id).length;
+            const rangeLabel =
+              g.min_selections === g.max_selections
+                ? `choose ${g.min_selections}`
+                : `choose ${g.min_selections}–${g.max_selections}`;
+            const needMore = g.is_required && selectedCount < g.min_selections;
+            return (
+              <div key={g.group_id}>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div className="text-xs font-medium">
+                    {g.name}
+                    <span className="ml-2 text-muted-foreground">({rangeLabel})</span>
+                    {g.is_required ? (
+                      <span className="ml-1 text-destructive">*</span>
+                    ) : null}
+                  </div>
+                  <span
+                    className={
+                      'text-[10px] font-medium uppercase tracking-wider ' +
+                      (needMore ? 'text-destructive' : 'text-muted-foreground')
+                    }
+                  >
+                    {selectedCount}/{g.max_selections}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {g.options.map((opt) => {
+                    const isSelected = item.selected_modifiers.some(
+                      (s) => s.group_id === g.group_id && s.modifier_id === opt.id,
+                    );
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => onToggleModifier(g, opt)}
+                        className={
+                          'rounded-full border px-3 py-1 text-xs transition-colors ' +
+                          (isSelected
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-card hover:bg-accent')
+                        }
+                      >
+                        {opt.name}
+                        {opt.price_delta_cents > 0
+                          ? ` (+${formatMoney(opt.price_delta_cents, currency)})`
+                          : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

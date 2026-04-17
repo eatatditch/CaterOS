@@ -85,23 +85,42 @@ export default async function QuoteDetailPage({
             </tr>
           </thead>
           <tbody>
-            {(items ?? []).map((it) => (
-              <tr key={it.id} className="border-t">
-                <td className="px-4 py-3">
-                  <div className="font-medium">{it.name}</div>
-                  {it.description ? (
-                    <div className="text-xs text-muted-foreground">{it.description}</div>
-                  ) : null}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{it.quantity}</td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {formatMoney(it.unit_price_cents, quote.currency)}
-                </td>
-                <td className="px-4 py-3 text-right font-medium tabular-nums">
-                  {formatMoney(it.total_cents, quote.currency)}
-                </td>
-              </tr>
-            ))}
+            {(items ?? []).map((it) => {
+              const mods = Array.isArray(it.modifiers) ? (it.modifiers as Array<{ group_name: string; name: string; price_delta_cents?: number }>) : [];
+              const byGroup = mods.reduce<Record<string, string[]>>((acc, m) => {
+                const label = m.price_delta_cents && m.price_delta_cents > 0
+                  ? `${m.name} (+${formatMoney(m.price_delta_cents, quote.currency)})`
+                  : m.name;
+                (acc[m.group_name] ??= []).push(label);
+                return acc;
+              }, {});
+              return (
+                <tr key={it.id} className="border-t align-top">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{it.name}</div>
+                    {it.description ? (
+                      <div className="text-xs text-muted-foreground">{it.description}</div>
+                    ) : null}
+                    {Object.keys(byGroup).length > 0 ? (
+                      <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+                        {Object.entries(byGroup).map(([group, names]) => (
+                          <li key={group}>
+                            <span className="font-medium">{group}:</span> {names.join(', ')}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">{it.quantity}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {formatMoney(it.unit_price_cents, quote.currency)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium tabular-nums">
+                    {formatMoney(it.total_cents, quote.currency)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot>
             <Totals quote={quote} />

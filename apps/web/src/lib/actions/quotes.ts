@@ -9,12 +9,21 @@ import { createAdminClient, tryCreateAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
 import { getConnectionForOrg, sendEmail } from '@/lib/gmail/client';
 
+const modifierSchema = z.object({
+  group_id: z.string(),
+  group_name: z.string(),
+  modifier_id: z.string(),
+  name: z.string(),
+  price_delta_cents: z.number().int(),
+});
+
 const itemSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   quantity: z.number().int().min(1),
   unit_price_cents: z.number().int().min(0),
   menu_item_id: z.string().uuid().optional().nullable(),
+  modifiers: z.array(modifierSchema).optional().default([]),
 });
 
 const createSchema = z.object({
@@ -113,6 +122,7 @@ export async function createQuote(input: z.infer<typeof createSchema>) {
     total_cents: it.quantity * it.unit_price_cents,
     position: idx,
     menu_item_id: it.menu_item_id ?? null,
+    modifiers: it.modifiers ?? [],
   }));
   const { error: itemsErr } = await supabase.from('quote_items').insert(itemsPayload);
   if (itemsErr) return { error: itemsErr.message };

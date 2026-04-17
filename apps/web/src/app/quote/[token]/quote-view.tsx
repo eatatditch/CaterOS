@@ -12,6 +12,7 @@ type Item = {
   quantity: number;
   unit_price_cents: number;
   total_cents: number;
+  modifiers?: Array<{ group_name: string; name: string; price_delta_cents?: number }> | null;
 };
 
 type Quote = {
@@ -158,6 +159,26 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
                     {it.description ? (
                       <div style={{ fontSize: 12, color: '#71717a' }}>{it.description}</div>
                     ) : null}
+                    {it.modifiers && it.modifiers.length > 0
+                      ? (() => {
+                          const grouped = it.modifiers.reduce<Record<string, string[]>>((acc, m) => {
+                            const label = m.price_delta_cents && m.price_delta_cents > 0
+                              ? `${m.name} (+${formatMoney(m.price_delta_cents, quote.currency)})`
+                              : m.name;
+                            (acc[m.group_name] ??= []).push(label);
+                            return acc;
+                          }, {});
+                          return (
+                            <ul style={{ marginTop: 6, marginLeft: 0, paddingLeft: 0, fontSize: 12, color: '#52525b', listStyle: 'none' }}>
+                              {Object.entries(grouped).map(([group, names]) => (
+                                <li key={group}>
+                                  <span style={{ fontWeight: 500 }}>{group}:</span> {names.join(', ')}
+                                </li>
+                              ))}
+                            </ul>
+                          );
+                        })()
+                      : null}
                   </td>
                   <td style={{ padding: '10px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {it.quantity}

@@ -36,6 +36,7 @@ type QuotePayload = {
     unit_price_cents: number;
     total_cents: number;
     position: number;
+    modifiers?: Array<{ group_name: string; name: string; price_delta_cents?: number }> | null;
   }>;
 };
 
