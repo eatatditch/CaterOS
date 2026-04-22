@@ -37,8 +37,6 @@ export function InvitationRow({
       }
       if (res.emailed === 'gmail') {
         toast.success(`Invite resent to ${invitation.email} via Gmail`);
-      } else if (res.emailed === 'supabase') {
-        toast.success(`Invite resent to ${invitation.email}`);
       } else {
         toast.message(
           'Couldn’t send email automatically — link copied so you can share it manually. Connect Gmail in Integrations for auto-send.',

@@ -31,9 +31,11 @@ function appBaseUrl() {
   );
 }
 
-// Sends the invite email via the org's connected Gmail. Falls back to Supabase's
-// built-in invite mailer if Gmail isn't connected; if *both* fail we return a
-// null channel and the caller can show the copy-link UX.
+// Sends the invite email via the org's connected Gmail. If Gmail isn't
+// connected we return null and the caller shows the copy-link UX — we do
+// NOT fall back to Supabase's inviteUserByEmail because that sends a
+// Supabase-branded magic link that routes through Supabase's hosted
+// confirmation UI and asks the invitee for a code.
 async function deliverInviteEmail(opts: {
   orgId: string;
   orgName: string;
@@ -41,7 +43,7 @@ async function deliverInviteEmail(opts: {
   email: string;
   role: string;
   token: string;
-}): Promise<'gmail' | 'supabase' | null> {
+}): Promise<'gmail' | null> {
   const inviteUrl = `${appBaseUrl()}/invite/${opts.token}`;
   const roleLabel = opts.role.replace('_', ' ');
   const inviter = opts.inviterName ?? 'Your teammate';
@@ -77,22 +79,10 @@ async function deliverInviteEmail(opts: {
       await sendEmail(connection, { to: opts.email, subject, textBody, htmlBody });
       return 'gmail';
     } catch (err) {
-      console.warn('[invite] Gmail send failed, falling back', err);
+      console.warn('[invite] Gmail send failed', err);
     }
   }
-
-  // Supabase fallback — only works for new emails (not existing auth users).
-  try {
-    const admin = createAdminClient();
-    await admin.auth.admin.inviteUserByEmail(opts.email, {
-      redirectTo: inviteUrl,
-      data: { org_name: opts.orgName, invite_token: opts.token },
-    });
-    return 'supabase';
-  } catch (err) {
-    console.warn('[invite] Supabase invite fallback failed', err);
-    return null;
-  }
+  return null;
 }
 
 const inviteSchema = z.object({

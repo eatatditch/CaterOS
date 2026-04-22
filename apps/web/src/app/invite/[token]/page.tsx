@@ -48,34 +48,7 @@ export default async function InvitePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Not signed in: point them at signup where they'll set email/password and
-  // the handle_new_user trigger will attach them to this invite automatically.
-  if (!user) {
-    return (
-      <InviteShell
-        title={`You're invited to ${orgName}`}
-        body={`Create an account for ${invitation.email} to accept this invitation.`}
-        cta={
-          <Link
-            href={`/signup?email=${encodeURIComponent(invitation.email)}&invite=${token}`}
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-6 font-medium text-primary-foreground hover:opacity-90"
-          >
-            Create account
-          </Link>
-        }
-        extra={
-          <Link
-            href={`/login?next=/invite/${token}`}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Already have an account? Log in
-          </Link>
-        }
-      />
-    );
-  }
-
-  if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+  if (user && user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
     return (
       <InviteShell
         title="Signed in as a different user"
@@ -92,9 +65,10 @@ export default async function InvitePage({
     );
   }
 
-  // Signed in with matching email. Show set-password form. The action will
-  // set the password, upsert membership, mark invitation accepted, and
-  // redirect to /app/welcome so the user can fill in name & phone.
+  // One-step activation: the form posts to setInvitePassword which creates
+  // (or resets) the auth user, signs them in, writes membership, and
+  // redirects to /welcome — no Supabase confirmation email, no /signup
+  // detour, no magic link round-trip.
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-8">
       <div className="w-full max-w-md rounded-lg border bg-card p-8 shadow-sm">
@@ -102,8 +76,9 @@ export default async function InvitePage({
           <ChefHat className="mx-auto mb-3 h-8 w-8 text-primary" />
           <h1 className="text-xl font-semibold">Welcome to {orgName}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Set a password for <span className="font-medium text-foreground">{invitation.email}</span> so you
-            can log in next time.
+            Set a password for{' '}
+            <span className="font-medium text-foreground">{invitation.email}</span>{' '}
+            to activate your account.
           </p>
         </div>
         <SetPasswordForm token={token} />
