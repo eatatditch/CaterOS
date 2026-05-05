@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Receipt } from 'lucide-react';
 import { formatMoney } from '@cateros/lib/money';
 import { createClient } from '@/lib/supabase/server';
@@ -37,7 +38,18 @@ export default async function InvoicesPage() {
     .reduce((sum, r) => sum + (r.total_cents - r.amount_paid_cents), 0);
 
   const columns: Column<Row>[] = [
-    { key: 'number', header: 'Invoice', render: (r) => <span className="font-medium">{r.number}</span> },
+    {
+      key: 'number',
+      header: 'Invoice',
+      render: (r) => (
+        <Link
+          href={`/app/invoices/${r.id}`}
+          className="font-medium text-primary hover:underline"
+        >
+          {r.number}
+        </Link>
+      ),
+    },
     {
       key: 'contact',
       header: 'Billed to',
