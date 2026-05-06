@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, DollarSign, ExternalLink, Send, Trash2, X } from 'lucide-react';
+import Link from 'next/link';
+import { Copy, DollarSign, ExternalLink, Pencil, Send, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoney } from '@cateros/lib/money';
 import { deleteQuote, sendQuote, setQuoteStatus } from '@/lib/actions/quotes';
@@ -53,8 +54,10 @@ export function QuoteActions({
   const [depositOpen, setDepositOpen] = useState(false);
 
   const publicUrl = publicToken ? `${appUrl}/quote/${publicToken}` : null;
-  const canTakeDeposit =
-    status !== 'declined' && status !== 'expired' && status !== 'converted';
+  const isFinal = status === 'declined' || status === 'expired' || status === 'converted';
+  const canEdit = !isFinal;
+  const canSend = !isFinal;
+  const canTakeDeposit = !isFinal;
   const remainingFromInvoice =
     invoiceTotalCents !== null && invoiceAmountPaidCents !== null
       ? invoiceTotalCents - invoiceAmountPaidCents
@@ -85,7 +88,14 @@ export function QuoteActions({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        {(status === 'draft' || status === 'sent' || status === 'viewed') && (
+        {canEdit && (
+          <Link href={`/app/quotes/${id}/edit`} className={buttonOutlineCls}>
+            <Pencil className="h-4 w-4" />
+            Edit
+          </Link>
+        )}
+
+        {canSend && (
           <button
             type="button"
             onClick={() => setDialogOpen(true)}

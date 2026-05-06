@@ -141,6 +141,157 @@ export async function createQuote(input: z.infer<typeof createSchema>) {
   redirect(`/app/quotes/${quote.id}`);
 }
 
+const updateSchema = createSchema.extend({});
+
+/**
+ * Update an existing quote — replaces line items, recomputes totals,
+ * syncs the linked deal's amount, and (if the quote already has an
+ * invoice from acceptance) syncs the invoice total + deposit amount
+ * so balances stay correct after the menu changes. Edits allowed for
+ * any status except declined/expired/converted.
+ */
+export async function updateQuote(id: string, input: z.infer<typeof updateSchema>) {
+  const ctx = await requireCurrent();
+  const parsed = updateSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+
+  const supabase = await createClient();
+  const admin = tryCreateAdminClient();
+
+  const { data: existing } = await supabase
+    .from('quotes')
+    .select('id, org_id, status, deal_id, currency, meta')
+    .eq('id', id)
+    .maybeSingle();
+  if (!existing) return { error: 'Quote not found.' };
+  if (['declined', 'expired', 'converted'].includes(existing.status)) {
+    return { error: `Can't edit a ${existing.status} quote.` };
+  }
+
+  const subtotal = parsed.data.items.reduce(
+    (sum, it) => sum + it.quantity * it.unit_price_cents,
+    0,
+  );
+  const totals = computeQuoteTotals({
+    subtotalCents: subtotal,
+    taxRate: parsed.data.tax_rate,
+    serviceFeeRate: parsed.data.service_fee_rate,
+    deliveryFeeCents: parsed.data.delivery_fee_cents,
+    gratuityRate: parsed.data.gratuity_rate,
+    discountCents: parsed.data.discount_cents,
+  });
+
+  const existingMeta = (existing.meta ?? {}) as Record<string, unknown>;
+  const { error: quoteErr } = await supabase
+    .from('quotes')
+    .update({
+      contact_id: parsed.data.contact_id || null,
+      deal_id: parsed.data.deal_id || null,
+      headcount: parsed.data.headcount,
+      event_date: parsed.data.event_date || null,
+      notes: parsed.data.notes || null,
+      subtotal_cents: totals.subtotalCents,
+      tax_cents: totals.taxCents,
+      service_fee_cents: totals.serviceFeeCents,
+      delivery_fee_cents: totals.deliveryFeeCents,
+      gratuity_cents: totals.gratuityCents,
+      discount_cents: totals.discountCents,
+      total_cents: totals.totalCents,
+      meta: {
+        ...existingMeta,
+        tax_rate: parsed.data.tax_rate,
+        service_fee_rate: parsed.data.service_fee_rate,
+        gratuity_rate: parsed.data.gratuity_rate,
+      },
+    })
+    .eq('id', id);
+  if (quoteErr) return { error: quoteErr.message };
+
+  // Replace line items
+  const { error: delErr } = await supabase.from('quote_items').delete().eq('quote_id', id);
+  if (delErr) return { error: delErr.message };
+  const itemsPayload = parsed.data.items.map((it, idx) => ({
+    quote_id: id,
+    org_id: existing.org_id,
+    name: it.name,
+    description: it.description ?? null,
+    quantity: it.quantity,
+    unit_price_cents: it.unit_price_cents,
+    total_cents: it.quantity * it.unit_price_cents,
+    position: idx,
+    menu_item_id: it.menu_item_id ?? null,
+    modifiers: it.modifiers ?? [],
+  }));
+  const { error: insErr } = await supabase.from('quote_items').insert(itemsPayload);
+  if (insErr) return { error: insErr.message };
+
+  // Sync linked deal
+  if (parsed.data.deal_id) {
+    await supabase
+      .from('deals')
+      .update({ amount_cents: totals.totalCents, currency: existing.currency })
+      .eq('id', parsed.data.deal_id);
+    revalidatePath('/app/pipeline');
+    revalidatePath(`/app/deals/${parsed.data.deal_id}`);
+  }
+
+  // Sync invoice (if one exists for this quote). Use admin to bypass RLS
+  // and also update payments-aware fields atomically.
+  if (admin) {
+    const { data: invoice } = await admin
+      .from('invoices')
+      .select('id, amount_paid_cents, meta')
+      .eq('quote_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (invoice) {
+      const invMeta = (invoice.meta ?? {}) as Record<string, unknown>;
+      const depositRate =
+        typeof invMeta.deposit_rate === 'number' ? (invMeta.deposit_rate as number) : 0.25;
+      const newDeposit = Math.round(totals.totalCents * depositRate);
+      const paid = Number(invoice.amount_paid_cents ?? 0);
+      const newStatus =
+        paid >= totals.totalCents
+          ? 'paid'
+          : paid > 0
+            ? 'partially_paid'
+            : 'open';
+      await admin
+        .from('invoices')
+        .update({
+          subtotal_cents: totals.subtotalCents,
+          tax_cents: totals.taxCents,
+          total_cents: totals.totalCents,
+          deposit_amount_cents: newDeposit,
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoice.id);
+      revalidatePath(`/app/invoices/${invoice.id}`);
+      revalidatePath('/app/invoices');
+    }
+
+    await admin.from('activities').insert({
+      org_id: existing.org_id,
+      type: 'event_log',
+      contact_id: parsed.data.contact_id || null,
+      deal_id: parsed.data.deal_id || null,
+      owner_id: ctx.user.id,
+      subject: 'Quote updated',
+      body: `New total ${formatMoney(totals.totalCents, existing.currency)}`,
+      meta: {
+        quote_id: id,
+        total_cents: totals.totalCents,
+      },
+    });
+  }
+
+  revalidatePath('/app/quotes');
+  revalidatePath(`/app/quotes/${id}`);
+  redirect(`/app/quotes/${id}`);
+}
+
 export async function setQuoteStatus(
   id: string,
   status: 'draft' | 'sent' | 'accepted' | 'declined',
@@ -308,14 +459,20 @@ export async function sendQuote(input: z.infer<typeof sendSchema>) {
     return { error: `Gmail send failed: ${msg}` };
   }
 
-  // Mark quote as sent
+  // Mark quote as sent — but don't downgrade an already-accepted quote.
+  // Resending after acceptance just refreshes sent_at for the audit trail.
+  const isAlreadyAccepted = quote.status === 'accepted' || quote.status === 'converted';
   await supabase
     .from('quotes')
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
+    .update(
+      isAlreadyAccepted
+        ? { sent_at: new Date().toISOString() }
+        : { status: 'sent', sent_at: new Date().toISOString() },
+    )
     .eq('id', quote.id);
 
-  // Move linked deal to "Quote Sent" stage (if deal exists)
-  if (quote.deal_id && admin) {
+  // Move linked deal to "Quote Sent" stage only if not already past that.
+  if (quote.deal_id && admin && !isAlreadyAccepted) {
     const { data: dealRow } = await admin
       .from('deals')
       .select('pipeline_id, stage_id')
