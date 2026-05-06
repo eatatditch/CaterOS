@@ -4,10 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { formatMoney } from '@cateros/lib/money';
-import {
-  recordManualPayment,
-  type ManualPaymentMethod,
-} from '@/lib/actions/billing';
+import { recordManualPayment } from '@/lib/actions/billing';
+import type { ManualPaymentMethod } from '@/lib/billing/payment-methods';
 import {
   Field,
   inputCls,
