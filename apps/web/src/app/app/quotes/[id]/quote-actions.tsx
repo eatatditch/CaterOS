@@ -6,10 +6,8 @@ import { Copy, DollarSign, ExternalLink, Send, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMoney } from '@cateros/lib/money';
 import { deleteQuote, sendQuote, setQuoteStatus } from '@/lib/actions/quotes';
-import {
-  recordManualPaymentForQuote,
-  type ManualPaymentMethod,
-} from '@/lib/actions/billing';
+import { recordManualPaymentForQuote } from '@/lib/actions/billing';
+import type { ManualPaymentMethod } from '@/lib/billing/payment-methods';
 import {
   Field,
   inputCls,

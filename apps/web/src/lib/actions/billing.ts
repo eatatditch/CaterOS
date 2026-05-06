@@ -4,20 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
+import { MANUAL_PAYMENT_METHODS } from '@/lib/billing/payment-methods';
 
 const schema = z.object({
   deposit_rate: z.number().min(0).max(1).optional(),
   auto_charge_enabled: z.boolean().optional(),
 });
-
-export const MANUAL_PAYMENT_METHODS = [
-  'cash',
-  'check',
-  'card_in_person',
-  'ach',
-  'other',
-] as const;
-export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
 
 const manualPaymentSchema = z.object({
   invoice_id: z.string().uuid(),
