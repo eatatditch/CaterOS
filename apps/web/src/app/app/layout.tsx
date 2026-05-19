@@ -1,13 +1,16 @@
 import {
+  BarChart3,
   Calendar,
   ChefHat,
   ClipboardList,
+  Compass,
   CreditCard,
   Kanban,
   LayoutDashboard,
   Mail,
   Receipt,
   Settings,
+  Target,
   Truck,
   Users,
   Utensils,
@@ -33,6 +36,9 @@ type NavEntry = {
 
 const navConfig: NavEntry[] = [
   { href: '/app', label: 'Dashboard', Icon: LayoutDashboard },
+  { href: '/app/scoreboard', label: 'Scoreboard', Icon: BarChart3, perm: 'reports.read' },
+  { href: '/app/my-pipeline', label: 'My pipeline', Icon: Target, perm: 'deals.manage' },
+  { href: '/app/prospects', label: 'Prospects', Icon: Compass, perm: 'deals.manage' },
   { href: '/app/contacts', label: 'Contacts', Icon: Users, perm: 'contacts.manage' },
   { href: '/app/pipeline', label: 'Pipeline', Icon: Kanban, perm: 'deals.manage' },
   { href: '/app/menus', label: 'Menus', Icon: Utensils, perm: 'menus.manage' },
@@ -42,6 +48,8 @@ const navConfig: NavEntry[] = [
   { href: '/app/invoices', label: 'Invoices', Icon: Receipt, perm: 'invoices.manage' },
   { href: '/app/billing', label: 'Billing', Icon: CreditCard, perm: 'invoices.charge' },
   { href: '/app/marketing', label: 'Marketing', Icon: Mail, perm: 'marketing.manage' },
+  { href: '/app/goals', label: 'Goals', Icon: Target, perm: 'org.manage' },
+  { href: '/app/ad-spend', label: 'Ad spend', Icon: BarChart3, perm: 'org.manage' },
   { href: '/app/settings', label: 'Settings', Icon: Settings },
 ];
 

@@ -7,6 +7,9 @@ import { createClient } from '@/lib/supabase/server';
 import { tryCreateAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
 
+const leadSourceValues = ['inbound', 'outbound', 'referral', 'paid_ad', 'event', 'walkup'] as const;
+const eventTypeValues = ['corporate', 'wedding', 'social', 'holiday', 'other'] as const;
+
 const schema = z.object({
   title: z.string().trim().min(1).max(200),
   amount_cents: z.coerce.number().int().min(0).default(0),
@@ -15,7 +18,12 @@ const schema = z.object({
   pipeline_id: z.string().uuid(),
   stage_id: z.string().uuid(),
   expected_close_date: z.string().optional().or(z.literal('')),
-  source: z.string().trim().max(80).optional().or(z.literal('')),
+  source: z.enum(leadSourceValues).optional().or(z.literal('')),
+  source_detail: z.string().trim().max(200).optional().or(z.literal('')),
+  location_id: z.string().uuid().optional().or(z.literal('')),
+  event_type: z.enum(eventTypeValues).optional().or(z.literal('')),
+  estimated_event_date: z.string().optional().or(z.literal('')),
+  lost_reason: z.string().trim().max(500).optional().or(z.literal('')),
 });
 
 export async function createDeal(formData: FormData) {

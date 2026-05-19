@@ -8,16 +8,18 @@ import { DealForm } from '../deal-form';
 export default async function NewDealPage() {
   await requireCurrent();
   const supabase = await createClient();
-  const [{ data: pipeline }, { data: contacts }, { data: companies }] = await Promise.all([
-    supabase
-      .from('pipelines')
-      .select('id, name, stages:id(id, name, position)')
-      .eq('is_default', true)
-      .limit(1)
-      .maybeSingle(),
-    supabase.from('contacts').select('id, first_name, last_name').order('last_name').limit(500),
-    supabase.from('companies').select('id, name').order('name').limit(500),
-  ]);
+  const [{ data: pipeline }, { data: contacts }, { data: companies }, { data: locations }] =
+    await Promise.all([
+      supabase
+        .from('pipelines')
+        .select('id, name, stages:id(id, name, position)')
+        .eq('is_default', true)
+        .limit(1)
+        .maybeSingle(),
+      supabase.from('contacts').select('id, first_name, last_name').order('last_name').limit(500),
+      supabase.from('companies').select('id, name').order('name').limit(500),
+      supabase.from('locations').select('id, name').order('name'),
+    ]);
 
   // stages nested query - fetch separately
   const { data: stages } = await supabase
@@ -44,6 +46,7 @@ export default async function NewDealPage() {
             label: [c.first_name, c.last_name].filter(Boolean).join(' '),
           }))}
           companies={companies ?? []}
+          locations={locations ?? []}
         />
       </div>
     </div>

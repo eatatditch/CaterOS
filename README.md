@@ -115,6 +115,33 @@ All timestamps are `timestamptz` (UTC). Display in the org/location's timezone.
 
 ---
 
+## Metrics & performance tracking
+
+The metrics layer adds three things on top of the CRM:
+
+- **`/app/scoreboard`** — owner view: this-period revenue vs goal, pipeline
+  coverage, per-manager scorecard, unanswered leads, stale leads, lost-deal
+  reasons, funnel, response-speed bands, ROAS by channel.
+- **`/app/my-pipeline`** — manager view (owner-scoped): hot/stale/unanswered
+  leads, outbound queue, week-to-date progress, recent activity. Mobile-first.
+- **`/app/prospects`, `/app/goals`, `/app/ad-spend`** — supporting CRUD.
+
+See [`docs/metrics.md`](docs/metrics.md) for the exact definition of every KPI
+and [`docs/manager-onboarding.md`](docs/manager-onboarding.md) for the
+activity-logging discipline that keeps the data honest.
+
+### Adding a new catering manager
+
+Adding a manager (eg. for Kings Park when it opens) is a config change:
+
+1. Invite them at `/app/settings/team` with role `sales`.
+2. Set their weekly + monthly goals at `/app/goals`.
+
+No code changes. RLS scopes them to only their own deals/activities/prospects
+automatically.
+
+---
+
 ## Deployment
 
 - **Vercel** — connect this repo; `vercel.json` configures the build & install commands

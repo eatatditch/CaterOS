@@ -9,7 +9,7 @@ import {
   jsonb,
 } from 'drizzle-orm/pg-core';
 import { orgs, locations, profiles } from './orgs';
-import { contacts } from './crm';
+import { contacts, eventTypeEnum } from './crm';
 import { quotes } from './quotes';
 
 export const eventStatusEnum = pgEnum('event_status', [
@@ -52,6 +52,12 @@ export const events = pgTable('events', {
   venueAddress: text('venue_address'),
   venueNotes: text('venue_notes'),
   notes: text('notes'),
+  eventType: eventTypeEnum('event_type'),
+  grossRevenueCents: integer('gross_revenue_cents').notNull().default(0),
+  foodCostCents: integer('food_cost_cents').notNull().default(0),
+  laborCostCents: integer('labor_cost_cents').notNull().default(0),
+  netMarginCents: integer('net_margin_cents'),
+  parentEventId: uuid('parent_event_id'),
   meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -9,7 +9,7 @@ import {
   integer,
   boolean,
 } from 'drizzle-orm/pg-core';
-import { orgs, profiles } from './orgs';
+import { orgs, locations, profiles } from './orgs';
 
 export const lifecycleStageEnum = pgEnum('lifecycle_stage', [
   'subscriber',
@@ -30,6 +30,28 @@ export const activityTypeEnum = pgEnum('activity_type', [
   'task',
   'sms',
   'event_log',
+  'site_visit',
+  'tasting',
+  'proposal_send',
+  'follow_up',
+  'networking',
+]);
+
+export const leadSourceEnum = pgEnum('lead_source', [
+  'inbound',
+  'outbound',
+  'referral',
+  'paid_ad',
+  'event',
+  'walkup',
+]);
+
+export const eventTypeEnum = pgEnum('event_type', [
+  'corporate',
+  'wedding',
+  'social',
+  'holiday',
+  'other',
 ]);
 
 export const companies = pgTable('companies', {
@@ -118,7 +140,14 @@ export const deals = pgTable('deals', {
   currency: text('currency').notNull().default('USD'),
   expectedCloseDate: timestamp('expected_close_date', { withTimezone: true }),
   closedAt: timestamp('closed_at', { withTimezone: true }),
-  source: text('source'),
+  source: leadSourceEnum('source'),
+  sourceDetail: text('source_detail'),
+  locationId: uuid('location_id').references(() => locations.id, { onDelete: 'set null' }),
+  eventType: eventTypeEnum('event_type'),
+  estimatedEventDate: timestamp('estimated_event_date', { withTimezone: true }),
+  firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
+  lostReason: text('lost_reason'),
   customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
   tags: text('tags').array().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -134,6 +163,7 @@ export const activities = pgTable('activities', {
   contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'cascade' }),
   companyId: uuid('company_id').references(() => companies.id, { onDelete: 'cascade' }),
   dealId: uuid('deal_id').references(() => deals.id, { onDelete: 'cascade' }),
+  prospectId: uuid('prospect_id'),
   ownerId: uuid('owner_id').references(() => profiles.id, { onDelete: 'set null' }),
   subject: text('subject'),
   body: text('body'),

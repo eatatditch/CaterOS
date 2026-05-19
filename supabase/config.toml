@@ -3,7 +3,7 @@ project_id = "cater-os"
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "storage"]
+schemas = ["public", "storage", "metrics"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 

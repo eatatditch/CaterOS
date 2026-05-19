@@ -5,7 +5,20 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
 
-const activityTypes = ['note', 'call', 'email', 'meeting', 'task', 'sms', 'event_log'] as const;
+const activityTypes = [
+  'note',
+  'call',
+  'email',
+  'meeting',
+  'task',
+  'sms',
+  'event_log',
+  'site_visit',
+  'tasting',
+  'proposal_send',
+  'follow_up',
+  'networking',
+] as const;
 
 const schema = z.object({
   type: z.enum(activityTypes),
@@ -14,6 +27,7 @@ const schema = z.object({
   contact_id: z.string().uuid().optional().or(z.literal('')),
   deal_id: z.string().uuid().optional().or(z.literal('')),
   company_id: z.string().uuid().optional().or(z.literal('')),
+  prospect_id: z.string().uuid().optional().or(z.literal('')),
   due_at: z.string().optional().or(z.literal('')),
 });
 
@@ -34,6 +48,7 @@ export async function createActivity(formData: FormData) {
 
   if (parsed.data.contact_id) revalidatePath(`/app/contacts/${parsed.data.contact_id}`);
   if (parsed.data.deal_id) revalidatePath(`/app/deals/${parsed.data.deal_id}`);
+  if (parsed.data.prospect_id) revalidatePath(`/app/prospects/${parsed.data.prospect_id}`);
   return { ok: true };
 }
 
