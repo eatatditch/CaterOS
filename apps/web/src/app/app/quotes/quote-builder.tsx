@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeQuoteTotals, formatMoney } from '@cateros/lib/money';
-import { createQuote } from '@/lib/actions/quotes';
+import { createQuote, updateQuote } from '@/lib/actions/quotes';
 import {
   Field,
   inputCls,
@@ -81,7 +81,7 @@ export type MenuItemForQuote = {
   modifier_groups: ModifierGroupDef[];
 };
 
-type SelectedModifier = {
+export type SelectedModifier = {
   group_id: string;
   group_name: string;
   modifier_id: string;
@@ -111,6 +111,29 @@ export type InquiryPrefill = {
   location_id: string;
 };
 
+export type ExistingQuote = {
+  id: string;
+  contact_id: string | null;
+  deal_id: string | null;
+  headcount: number;
+  event_date: string;
+  notes: string;
+  tax_rate: number;
+  service_fee_rate: number;
+  delivery_fee_dollars: number;
+  gratuity_rate: number;
+  discount_dollars: number;
+  deposit_dollars: number;
+  items: Array<{
+    menu_item_id: string | null;
+    name: string;
+    description: string;
+    quantity: number;
+    unit_price_cents: number;
+    selected_modifiers: SelectedModifier[];
+  }>;
+};
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -122,6 +145,7 @@ export function QuoteBuilder({
   deals = [],
   locations = [],
   prefill = null,
+  existing = null,
 }: {
   currency: string;
   contacts: { id: string; label: string }[];
@@ -129,21 +153,50 @@ export function QuoteBuilder({
   deals?: { id: string; label: string; subtitle: string }[];
   locations?: { id: string; name: string }[];
   prefill?: InquiryPrefill | null;
+  existing?: ExistingQuote | null;
 }) {
-  const [dealId, setDealId] = useState(prefill?.deal_id ?? '');
-  const [contactId, setContactId] = useState(prefill?.contact_id ?? '');
-  const [headcount, setHeadcount] = useState(prefill?.headcount ?? 0);
-  const [eventDate, setEventDate] = useState(prefill?.event_date ?? '');
+  const isEdit = existing !== null;
+  const menuById = useMemo(() => {
+    const m = new Map<string, MenuItemForQuote>();
+    for (const mi of menuItems) m.set(mi.id, mi);
+    return m;
+  }, [menuItems]);
+
+  const initialItems: LineItem[] = useMemo(() => {
+    if (!existing) return [];
+    return existing.items.map((it) => {
+      const mi = it.menu_item_id ? menuById.get(it.menu_item_id) : undefined;
+      const modifierGroups = mi?.modifier_groups ?? [];
+      const modSum = it.selected_modifiers.reduce((s, m) => s + m.price_delta_cents, 0);
+      return {
+        key: uid(),
+        menu_item_id: it.menu_item_id,
+        name: it.name,
+        description: it.description,
+        quantity: it.quantity,
+        base_price_cents: it.unit_price_cents - modSum,
+        unit_price_cents: it.unit_price_cents,
+        modifier_groups: modifierGroups,
+        selected_modifiers: it.selected_modifiers,
+        expanded: false,
+      };
+    });
+  }, [existing, menuById]);
+
+  const [dealId, setDealId] = useState(existing?.deal_id ?? prefill?.deal_id ?? '');
+  const [contactId, setContactId] = useState(existing?.contact_id ?? prefill?.contact_id ?? '');
+  const [headcount, setHeadcount] = useState(existing?.headcount ?? prefill?.headcount ?? 0);
+  const [eventDate, setEventDate] = useState(existing?.event_date ?? prefill?.event_date ?? '');
   const [serviceType, setServiceType] = useState(prefill?.service_type ?? '');
   const [locationId, setLocationId] = useState(prefill?.location_id ?? '');
-  const [notes, setNotes] = useState('');
-  const [taxRate, setTaxRate] = useState(0.0875);
-  const [serviceFeeRate, setServiceFeeRate] = useState(0.18);
-  const [deliveryFee, setDeliveryFee] = useState(0);
-  const [gratuityRate, setGratuityRate] = useState(0);
-  const [discount, setDiscount] = useState(0);
-  const [deposit, setDeposit] = useState(0);
-  const [items, setItems] = useState<LineItem[]>([]);
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [taxRate, setTaxRate] = useState(existing?.tax_rate ?? 0.0875);
+  const [serviceFeeRate, setServiceFeeRate] = useState(existing?.service_fee_rate ?? 0.18);
+  const [deliveryFee, setDeliveryFee] = useState(existing?.delivery_fee_dollars ?? 0);
+  const [gratuityRate, setGratuityRate] = useState(existing?.gratuity_rate ?? 0);
+  const [discount, setDiscount] = useState(existing?.discount_dollars ?? 0);
+  const [deposit, setDeposit] = useState(existing?.deposit_dollars ?? 0);
+  const [items, setItems] = useState<LineItem[]>(initialItems);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -281,34 +334,37 @@ export function QuoteBuilder({
       toast.error(problem);
       return;
     }
-    startTransition(async () => {
-      const res = await createQuote({
-        contact_id: contactId || null,
-        deal_id: dealId || null,
-        headcount,
-        event_date: eventDate || null,
-        notes: notes || null,
-        tax_rate: taxRate,
-        service_fee_rate: serviceFeeRate,
-        delivery_fee_cents: Math.round(deliveryFee * 100),
-        gratuity_rate: gratuityRate,
-        discount_cents: Math.round(discount * 100),
-        deposit_cents: Math.round(deposit * 100),
-        items: items.map((it) => ({
-          name: it.name,
-          description: it.description,
-          quantity: it.quantity,
-          unit_price_cents: it.unit_price_cents,
-          menu_item_id: it.menu_item_id ?? null,
-          modifiers: it.selected_modifiers.map((s) => ({
-            group_id: s.group_id,
-            group_name: s.group_name,
-            modifier_id: s.modifier_id,
-            name: s.name,
-            price_delta_cents: s.price_delta_cents,
-          })),
+    const payload = {
+      contact_id: contactId || null,
+      deal_id: dealId || null,
+      headcount,
+      event_date: eventDate || null,
+      notes: notes || null,
+      tax_rate: taxRate,
+      service_fee_rate: serviceFeeRate,
+      delivery_fee_cents: Math.round(deliveryFee * 100),
+      gratuity_rate: gratuityRate,
+      discount_cents: Math.round(discount * 100),
+      deposit_cents: Math.round(deposit * 100),
+      items: items.map((it) => ({
+        name: it.name,
+        description: it.description,
+        quantity: it.quantity,
+        unit_price_cents: it.unit_price_cents,
+        menu_item_id: it.menu_item_id ?? null,
+        modifiers: it.selected_modifiers.map((s) => ({
+          group_id: s.group_id,
+          group_name: s.group_name,
+          modifier_id: s.modifier_id,
+          name: s.name,
+          price_delta_cents: s.price_delta_cents,
         })),
-      });
+      })),
+    };
+    startTransition(async () => {
+      const res = isEdit && existing
+        ? await updateQuote(existing.id, payload)
+        : await createQuote(payload);
       if (res?.error) {
         setError(res.error);
         toast.error(res.error);
@@ -594,7 +650,7 @@ export function QuoteBuilder({
             onClick={onSubmit}
             className={`${buttonPrimaryCls} mt-4 w-full`}
           >
-            {isPending ? 'Saving…' : 'Save quote'}
+            {isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Save quote'}
           </button>
         </div>
       </aside>

@@ -31,6 +31,23 @@ export default async function QuoteDetailPage({
     .eq('quote_id', id)
     .order('position');
 
+  const { data: org } = await supabase
+    .from('orgs')
+    .select('settings')
+    .eq('id', quote.org_id)
+    .maybeSingle();
+  const orgSettings = (org?.settings as Record<string, unknown> | null) ?? {};
+  const depositRate =
+    typeof orgSettings.deposit_rate === 'number' ? orgSettings.deposit_rate : 0.25;
+
+  const { data: invoiceForQuote } = await supabase
+    .from('invoices')
+    .select('id, total_cents, amount_paid_cents, deposit_amount_cents')
+    .eq('quote_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const contact = quote.contacts as unknown as {
     first_name: string | null;
     last_name: string | null;
@@ -69,6 +86,12 @@ export default async function QuoteDetailPage({
               contactName={contactName}
               publicToken={quote.public_token ?? null}
               appUrl={appUrl}
+              totalCents={Number(quote.total_cents)}
+              currency={String(quote.currency)}
+              depositRate={depositRate}
+              invoiceId={invoiceForQuote?.id ?? null}
+              invoiceTotalCents={invoiceForQuote?.total_cents ?? null}
+              invoiceAmountPaidCents={invoiceForQuote?.amount_paid_cents ?? null}
             />
           </div>
         }
