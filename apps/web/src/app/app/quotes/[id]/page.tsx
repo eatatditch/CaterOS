@@ -196,6 +196,16 @@ function Totals({ quote }: { quote: Record<string, number | string> }) {
           {formatMoney(Number(quote.total_cents), String(quote.currency))}
         </td>
       </tr>
+      {Number(quote.deposit_cents) > 0 && (
+        <tr>
+          <td colSpan={3} className="px-4 py-2 text-right font-medium text-primary">
+            Deposit due to book
+          </td>
+          <td className="px-4 py-2 text-right font-medium tabular-nums text-primary">
+            {formatMoney(Number(quote.deposit_cents), String(quote.currency))}
+          </td>
+        </tr>
+      )}
     </>
   );
 }

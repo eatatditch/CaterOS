@@ -123,6 +123,7 @@ export type ExistingQuote = {
   delivery_fee_dollars: number;
   gratuity_rate: number;
   discount_dollars: number;
+  deposit_dollars: number;
   items: Array<{
     menu_item_id: string | null;
     name: string;
@@ -194,6 +195,7 @@ export function QuoteBuilder({
   const [deliveryFee, setDeliveryFee] = useState(existing?.delivery_fee_dollars ?? 0);
   const [gratuityRate, setGratuityRate] = useState(existing?.gratuity_rate ?? 0);
   const [discount, setDiscount] = useState(existing?.discount_dollars ?? 0);
+  const [deposit, setDeposit] = useState(existing?.deposit_dollars ?? 0);
   const [items, setItems] = useState<LineItem[]>(initialItems);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -343,6 +345,7 @@ export function QuoteBuilder({
       delivery_fee_cents: Math.round(deliveryFee * 100),
       gratuity_rate: gratuityRate,
       discount_cents: Math.round(discount * 100),
+      deposit_cents: Math.round(deposit * 100),
       items: items.map((it) => ({
         name: it.name,
         description: it.description,
@@ -587,6 +590,20 @@ export function QuoteBuilder({
                 className={inputCls}
               />
             </Field>
+            <Field
+              label="Deposit ($)"
+              htmlFor="deposit"
+              hint="Shown on the quote and charged when the client accepts. Leave at 0 to use the default deposit rate from Billing."
+            >
+              <NumericInput
+                step="0.01"
+                min="0"
+                value={deposit}
+                onChange={setDeposit}
+                className={inputCls}
+                placeholder="0.00"
+              />
+            </Field>
           </div>
         </section>
       </div>
@@ -615,6 +632,14 @@ export function QuoteBuilder({
               <span>Total</span>
               <span>{formatMoney(totals.totalCents, currency)}</span>
             </div>
+            {deposit > 0 && (
+              <div className="mt-1.5 flex justify-between font-medium text-primary">
+                <span>Deposit to book</span>
+                <span className="tabular-nums">
+                  {formatMoney(Math.round(deposit * 100), currency)}
+                </span>
+              </div>
+            )}
           </dl>
 
           {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}

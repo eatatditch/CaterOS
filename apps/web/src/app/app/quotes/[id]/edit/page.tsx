@@ -23,7 +23,7 @@ export default async function EditQuotePage({
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, status, contact_id, deal_id, headcount, event_date, notes, delivery_fee_cents, discount_cents, currency, meta',
+      'id, status, contact_id, deal_id, headcount, event_date, notes, delivery_fee_cents, discount_cents, deposit_cents, currency, meta',
     )
     .eq('id', id)
     .maybeSingle();
@@ -135,6 +135,7 @@ export default async function EditQuotePage({
     delivery_fee_dollars: Number(quote.delivery_fee_cents ?? 0) / 100,
     gratuity_rate: typeof meta.gratuity_rate === 'number' ? (meta.gratuity_rate as number) : 0,
     discount_dollars: Number(quote.discount_cents ?? 0) / 100,
+    deposit_dollars: Number(quote.deposit_cents ?? 0) / 100,
     items: (items ?? []).map((it) => ({
       menu_item_id: it.menu_item_id ?? null,
       name: it.name,

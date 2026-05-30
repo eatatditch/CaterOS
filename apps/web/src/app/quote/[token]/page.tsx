@@ -19,6 +19,7 @@ type QuotePayload = {
   discount_cents: number;
   total_cents: number;
   deposit_cents: number;
+  deposit_due_cents: number;
   currency: string;
   notes: string | null;
   terms_html: string | null;

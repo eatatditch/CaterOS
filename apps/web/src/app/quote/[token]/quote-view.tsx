@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Check, ChefHat, Calendar, Users } from 'lucide-react';
 import { formatMoney } from '@cateros/lib/money';
 import { acceptQuote } from './accept-action';
@@ -29,6 +30,7 @@ type Quote = {
   discount_cents: number;
   total_cents: number;
   deposit_cents: number;
+  deposit_due_cents?: number;
   currency: string;
   notes: string | null;
   terms_html: string | null;
@@ -43,6 +45,10 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
   const [accepted, setAccepted] = useState(
     quote.status === 'accepted' || quote.status === 'converted',
   );
+
+  // Effective deposit due to book — prefer the per-quote amount, falling back
+  // to the rate-derived amount the RPC computes. Drives the deposit line + CTA.
+  const depositDue = quote.deposit_due_cents ?? quote.deposit_cents ?? 0;
 
   function onAccept() {
     setError(null);
@@ -228,6 +234,22 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
               {formatMoney(quote.total_cents, quote.currency)}
             </span>
           </div>
+          {depositDue > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: 8,
+                color: '#ea580c',
+                fontWeight: 600,
+              }}
+            >
+              <span>Deposit due to book</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {formatMoney(depositDue, quote.currency)}
+              </span>
+            </div>
+          )}
         </div>
 
         {quote.notes ? (
@@ -248,21 +270,44 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
 
         <div style={{ padding: '24px 28px 28px', borderTop: '1px solid #e4e4e7' }}>
           {accepted ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                background: '#dcfce7',
-                color: '#166534',
-                padding: '14px 16px',
-                borderRadius: 8,
-                fontWeight: 500,
-              }}
-            >
-              <Check style={{ width: 18, height: 18 }} />
-              Quote accepted — thanks! We&apos;ll follow up with next steps shortly.
-            </div>
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: '#dcfce7',
+                  color: '#166534',
+                  padding: '14px 16px',
+                  borderRadius: 8,
+                  fontWeight: 500,
+                }}
+              >
+                <Check style={{ width: 18, height: 18 }} />
+                Quote accepted — thanks! We&apos;ll follow up with next steps shortly.
+              </div>
+              {depositDue > 0 ? (
+                <Link
+                  href={`/quote/${token}/deposit`}
+                  style={{
+                    display: 'block',
+                    boxSizing: 'border-box',
+                    width: '100%',
+                    marginTop: 14,
+                    padding: '14px 20px',
+                    background: '#ea580c',
+                    color: '#fff',
+                    borderRadius: 8,
+                    fontSize: 16,
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Pay deposit with card · {formatMoney(depositDue, quote.currency)}
+                </Link>
+              ) : null}
+            </>
           ) : quote.status === 'declined' ? (
             <div
               style={{
@@ -293,7 +338,11 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
                   opacity: isPending ? 0.6 : 1,
                 }}
               >
-                {isPending ? 'Accepting…' : 'Accept quote'}
+                {isPending
+                  ? 'Processing…'
+                  : depositDue > 0
+                    ? `Accept & pay deposit · ${formatMoney(depositDue, quote.currency)}`
+                    : 'Accept quote'}
               </button>
               {error ? (
                 <p style={{ marginTop: 10, color: '#b91c1c', fontSize: 13 }}>{error}</p>
@@ -306,7 +355,9 @@ export function QuoteView({ quote, token }: { quote: Quote; token: string }) {
                   textAlign: 'center',
                 }}
               >
-                Questions? Reply to the email we sent.
+                {depositDue > 0
+                  ? 'Accepting takes you to a secure Stripe checkout to pay your deposit by card.'
+                  : 'Questions? Reply to the email we sent.'}
               </p>
             </>
           )}
