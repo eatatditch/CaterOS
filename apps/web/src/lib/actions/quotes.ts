@@ -37,6 +37,7 @@ const createSchema = z.object({
   delivery_fee_cents: z.number().int().min(0).default(0),
   gratuity_rate: z.number().min(0).max(1).default(0),
   discount_cents: z.number().int().min(0).default(0),
+  deposit_cents: z.number().int().min(0).default(0),
   items: z.array(itemSchema).min(1, 'Add at least one item'),
 });
 
@@ -99,6 +100,9 @@ export async function createQuote(input: z.infer<typeof createSchema>) {
       gratuity_cents: totals.gratuityCents,
       discount_cents: totals.discountCents,
       total_cents: totals.totalCents,
+      // Per-quote deposit (cents). 0 → fall back to the org deposit rate at
+      // acceptance. Capped at the total so it can never exceed what's owed.
+      deposit_cents: Math.min(parsed.data.deposit_cents, totals.totalCents),
       currency: ctx.org.currency,
       public_token: randomToken(),
       meta: {

@@ -143,13 +143,15 @@ as $$
     'discount_cents', (select discount_cents from q),
     'total_cents', (select total_cents from q),
     'deposit_cents', (select deposit_cents from q),
+    -- Mirror accept_quote(): per-quote deposit wins; otherwise the org rate
+    -- (defaulting to 25% when unset), clamped to [0,1].
     'deposit_due_cents', (
       select case
         when coalesce(q.deposit_cents, 0) > 0 then least(q.deposit_cents, q.total_cents)
-        else round(q.total_cents * coalesce(
-          (select least(greatest((settings->>'deposit_rate')::numeric, 0), 1)
-             from orgs where id = q.org_id),
-          0.25))
+        else round(q.total_cents * (
+          select least(greatest(coalesce((settings->>'deposit_rate')::numeric, 0.25), 0), 1)
+            from orgs where id = q.org_id
+        ))
       end
       from q
     ),
