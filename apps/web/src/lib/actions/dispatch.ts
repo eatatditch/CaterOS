@@ -5,17 +5,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
 import { hasRole } from '@cateros/lib/auth';
-
-export const DISPATCH_STATUSES = [
-  'unassigned',
-  'assigned',
-  'en_route',
-  'arrived',
-  'delivered',
-  'completed',
-] as const;
-
-export type DispatchStatus = (typeof DISPATCH_STATUSES)[number];
+import { DISPATCH_STATUSES, type DispatchStatus } from '@/lib/dispatch/statuses';
 
 const assignSchema = z.object({
   eventId: z.string().uuid(),

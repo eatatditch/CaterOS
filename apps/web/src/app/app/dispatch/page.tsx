@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { DeleteEventButton } from '@/components/delete-event-button';
 import { DriverSelect, StatusSelect, type DriverOption } from './dispatch-controls';
 import { MyDeliveriesToggle } from './my-deliveries-toggle';
-import { type DispatchStatus } from '@/lib/actions/dispatch';
+import { type DispatchStatus } from '@/lib/dispatch/statuses';
 
 const DISPATCH_LABELS: Record<DispatchStatus, string> = {
   unassigned: 'Unassigned',

@@ -4,12 +4,8 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { selectCls } from '@/components/ui/field';
-import {
-  assignDriver,
-  setDispatchStatus,
-  DISPATCH_STATUSES,
-  type DispatchStatus,
-} from '@/lib/actions/dispatch';
+import { assignDriver, setDispatchStatus } from '@/lib/actions/dispatch';
+import { DISPATCH_STATUSES, type DispatchStatus } from '@/lib/dispatch/statuses';
 
 export type DriverOption = { id: string; name: string; role: string };
 
