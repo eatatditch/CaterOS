@@ -438,6 +438,90 @@ export async function processSequenceEnrollments() {
   return { processed };
 }
 
+/**
+ * Auto-enroll a contact into every ACTIVE sequence in the org whose trigger
+ * matches `trigger`. Best-effort: uses the service-role admin client so it
+ * works on public/anon paths (lead capture, public quote accept) that have no
+ * session, and silently no-ops when the admin client or sequence steps are
+ * missing. Respects the unique (sequence_id, contact_id) constraint by using
+ * an idempotent upsert that ignores duplicates, so re-triggering never errors
+ * or double-enrolls.
+ *
+ * Trigger strings must match the `sequence_trigger` enum:
+ *   inbound_lead | quote_sent | quote_accepted | event_completed |
+ *   annual_rebook | abandoned_quote | manual
+ */
+export async function enrollContactsForTrigger(
+  orgId: string,
+  contactId: string,
+  trigger:
+    | 'inbound_lead'
+    | 'quote_sent'
+    | 'quote_accepted'
+    | 'event_completed'
+    | 'annual_rebook'
+    | 'abandoned_quote'
+    | 'manual',
+): Promise<{ enrolled: number }> {
+  if (!orgId || !contactId) return { enrolled: 0 };
+  const admin = tryCreateAdminClient();
+  if (!admin) return { enrolled: 0 };
+
+  // Active sequences in this org that fire on this trigger.
+  const { data: seqs } = await admin
+    .from('sequences')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .eq('trigger', trigger);
+
+  if (!seqs || seqs.length === 0) return { enrolled: 0 };
+
+  let enrolled = 0;
+  for (const seq of seqs) {
+    // First step's delay sets when the first email goes out.
+    const { data: firstStep } = await admin
+      .from('sequence_steps')
+      .select('delay_hours')
+      .eq('sequence_id', seq.id)
+      .eq('position', 0)
+      .maybeSingle();
+    if (!firstStep) continue; // sequence has no steps yet — skip
+
+    // Skip if already enrolled (respect the unique constraint up-front).
+    const { data: existing } = await admin
+      .from('sequence_enrollments')
+      .select('id')
+      .eq('sequence_id', seq.id)
+      .eq('contact_id', contactId)
+      .maybeSingle();
+    if (existing) continue;
+
+    const nextAt = new Date(
+      Date.now() + firstStep.delay_hours * 3600 * 1000,
+    ).toISOString();
+
+    // Idempotent insert — ignore duplicates in case of a race on the unique
+    // (sequence_id, contact_id) constraint.
+    const { error } = await admin
+      .from('sequence_enrollments')
+      .upsert(
+        {
+          org_id: orgId,
+          sequence_id: seq.id,
+          contact_id: contactId,
+          current_step: 0,
+          next_send_at: nextAt,
+          status: 'active',
+        },
+        { onConflict: 'sequence_id,contact_id', ignoreDuplicates: true },
+      );
+    if (!error) enrolled++;
+  }
+
+  return { enrolled };
+}
+
 export async function enrollContactInSequence(sequenceId: string, contactId: string) {
   const ctx = await requireCurrent();
   const supabase = await createClient();

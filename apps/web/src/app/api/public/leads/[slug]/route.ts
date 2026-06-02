@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { enrollContactsForTrigger } from '@/lib/actions/marketing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -90,6 +91,25 @@ export async function POST(
     }
     console.error('[capture_lead]', error);
     return NextResponse.json({ error: 'server_error' }, { status: 500, headers: CORS_HEADERS });
+  }
+
+  // Best-effort: auto-enroll the new contact into any active 'inbound_lead'
+  // sequences. capture_lead returns the deal id, so resolve the contact + org
+  // from it. Never block or fail the lead capture on enrollment errors.
+  try {
+    const dealId = data as string | null;
+    if (dealId) {
+      const { data: deal } = await supabase
+        .from('deals')
+        .select('contact_id, org_id')
+        .eq('id', dealId)
+        .maybeSingle();
+      if (deal?.contact_id && deal.org_id) {
+        await enrollContactsForTrigger(deal.org_id, deal.contact_id, 'inbound_lead');
+      }
+    }
+  } catch (err) {
+    console.error('[capture_lead] enrollment failed', err);
   }
 
   return NextResponse.json({ ok: true, deal_id: data }, { headers: CORS_HEADERS });

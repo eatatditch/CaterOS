@@ -1,6 +1,7 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { enrollContactsForTrigger } from '@/lib/actions/marketing';
 
 export type AcceptResult =
   | {
@@ -23,6 +24,25 @@ export async function acceptQuote(token: string): Promise<AcceptResult> {
   }
 
   const result = (data ?? {}) as Record<string, unknown>;
+
+  // Best-effort: auto-enroll the quote's contact into active 'quote_accepted'
+  // sequences. Resolve contact + org from the public token (no session here).
+  // Skip on re-acceptance so we don't re-trigger. Never block acceptance.
+  if (!result.already_accepted) {
+    try {
+      const { data: quote } = await supabase
+        .from('quotes')
+        .select('org_id, contact_id')
+        .eq('public_token', token)
+        .maybeSingle();
+      if (quote?.contact_id && quote.org_id) {
+        await enrollContactsForTrigger(quote.org_id, quote.contact_id, 'quote_accepted');
+      }
+    } catch (err) {
+      console.error('[acceptQuote] enrollment failed', err);
+    }
+  }
+
   return {
     ok: true,
     already_accepted: Boolean(result.already_accepted),

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, tryCreateAdminClient } from '@/lib/supabase/admin';
 import { requireCurrent } from '@/lib/auth/current';
 import { getConnectionForOrg, sendEmail } from '@/lib/gmail/client';
+import { enrollContactsForTrigger } from '@/lib/actions/marketing';
 
 const modifierSchema = z.object({
   group_id: z.string(),
@@ -316,11 +317,70 @@ export async function setQuoteStatus(
   id: string,
   status: 'draft' | 'sent' | 'accepted' | 'declined',
 ) {
-  await requireCurrent();
+  const ctx = await requireCurrent();
   const supabase = await createClient();
+
+  // Accepting a quote must go through the accept_quote RPC so it creates the
+  // invoice + deposit (and, once that migration lands, the calendar event) —
+  // the same path the public accept page uses. A bare status flip here would
+  // diverge from that flow and skip invoice/deposit creation.
+  if (status === 'accepted') {
+    const admin = tryCreateAdminClient();
+    if (!admin) {
+      return { error: 'Server is not configured to accept quotes (missing service role key).' };
+    }
+
+    // Ensure the quote has a public_token (accept_quote keys off it). Mirrors
+    // how record_manual_payment_for_quote requires/uses the token.
+    const { data: quote } = await admin
+      .from('quotes')
+      .select('id, org_id, contact_id, public_token, status')
+      .eq('id', id)
+      .maybeSingle();
+    if (!quote) return { error: 'Quote not found.' };
+
+    let token = quote.public_token as string | null;
+    if (!token) {
+      token = randomToken();
+      const { error: tokenErr } = await admin
+        .from('quotes')
+        .update({ public_token: token })
+        .eq('id', id);
+      if (tokenErr) return { error: tokenErr.message };
+    }
+
+    const { error: rpcErr } = await admin.rpc('accept_quote', { p_token: token });
+    if (rpcErr) {
+      if (rpcErr.message.includes('quote_not_acceptable')) {
+        return { error: 'This quote is no longer acceptable.' };
+      }
+      if (rpcErr.message.includes('quote_not_found')) {
+        return { error: 'Quote not found.' };
+      }
+      return { error: rpcErr.message };
+    }
+
+    // Best-effort: auto-enroll the quote's contact into active 'quote_accepted'
+    // sequences. Never block or fail acceptance on enrollment errors.
+    if (quote.contact_id) {
+      try {
+        await enrollContactsForTrigger(quote.org_id, quote.contact_id, 'quote_accepted');
+      } catch (err) {
+        console.error('[setQuoteStatus] enrollment failed', err);
+      }
+    }
+
+    revalidatePath('/app/quotes');
+    revalidatePath(`/app/quotes/${id}`);
+    revalidatePath('/app/pipeline');
+    revalidatePath('/app/invoices');
+    return { ok: true };
+  }
+
+  // sent / declined / draft transitions stay a simple status update.
+  void ctx;
   const patch: Record<string, unknown> = { status };
   if (status === 'sent') patch.sent_at = new Date().toISOString();
-  if (status === 'accepted') patch.accepted_at = new Date().toISOString();
   const { error } = await supabase.from('quotes').update(patch).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/app/quotes');
@@ -534,6 +594,16 @@ export async function sendQuote(input: z.infer<typeof sendSchema>) {
         outbound: true,
       },
     });
+  }
+
+  // Best-effort: auto-enroll the quote's contact into active 'quote_sent'
+  // sequences. Never block or fail the send on enrollment errors.
+  if (quote.contact_id) {
+    try {
+      await enrollContactsForTrigger(ctx.org.id, quote.contact_id, 'quote_sent');
+    } catch (err) {
+      console.error('[sendQuote] enrollment failed', err);
+    }
   }
 
   revalidatePath('/app/quotes');
