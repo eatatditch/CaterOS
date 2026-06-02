@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Plus, Lock, Trash2, Copy } from 'lucide-react';
+import Link from 'next/link';
+import { FileText, Plus, Lock, Trash2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { createBeo, updateBeo, finalizeBeo, deleteBeo } from '@/lib/actions/beos';
 import {
@@ -157,6 +158,16 @@ export function BeoSection({
                 </option>
               ))}
             </select>
+          ) : null}
+          {activeBeo ? (
+            <Link
+              href={`/app/events/${eventId}/beo/print?beo=${activeBeo.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonOutlineCls + ' h-8 text-xs'}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print BEO
+            </Link>
           ) : null}
           <button
             type="button"

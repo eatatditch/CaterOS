@@ -8,13 +8,14 @@ import { StatusBadge, eventStatusTone } from '@/components/ui/status-badge';
 import { EventForm } from '../event-form';
 import { DeleteEventButton } from '@/components/delete-event-button';
 import { BeoSection } from './beo-section';
+import { StaffingSection } from './staffing-section';
 
 export default async function EventDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireCurrent();
+  const ctx = await requireCurrent();
   const { id } = await params;
   const supabase = await createClient();
   const { data: event } = await supabase.from('events').select('*').eq('id', id).maybeSingle();
@@ -24,6 +25,8 @@ export default async function EventDetailPage({
     { data: contacts },
     { data: beos },
     { data: quoteItems },
+    { data: staffRows },
+    { data: memberRows },
   ] = await Promise.all([
     supabase
       .from('contacts')
@@ -42,7 +45,39 @@ export default async function EventDetailPage({
           .eq('quote_id', event.quote_id)
           .order('position')
       : Promise.resolve({ data: [] as { name: string; quantity: number }[] }),
+    supabase
+      .from('event_staff')
+      .select(
+        'id, user_id, role, call_time, release_time, hourly_rate_cents, currency, profiles:user_id (id, full_name)',
+      )
+      .eq('event_id', id)
+      .order('role'),
+    supabase
+      .from('memberships')
+      .select('user_id, profiles:user_id (id, full_name)')
+      .eq('org_id', event.org_id),
   ]);
+
+  const members = (memberRows ?? []).map((m) => ({
+    id: m.user_id as string,
+    label:
+      (m.profiles as unknown as { full_name: string | null } | null)?.full_name ?? '(no name)',
+  }));
+  const memberName = (uid: string | null) =>
+    uid ? members.find((m) => m.id === uid)?.label ?? null : null;
+  const staff = (staffRows ?? []).map((s) => ({
+    id: s.id as string,
+    userId: (s.user_id as string | null) ?? null,
+    role: s.role as string,
+    callTime: (s.call_time as string | null) ?? null,
+    releaseTime: (s.release_time as string | null) ?? null,
+    hourlyRateCents: (s.hourly_rate_cents as number | null) ?? null,
+    currency: (s.currency as string | null) ?? ctx.org.currency,
+    memberName:
+      (s.profiles as unknown as { full_name: string | null } | null)?.full_name ??
+      memberName((s.user_id as string | null) ?? null),
+  }));
+  const canManageEvents = ctx.can('events.manage');
 
   const starts = new Date(event.starts_at);
   const ends = new Date(event.ends_at);
@@ -123,6 +158,14 @@ export default async function EventDetailPage({
             name: qi.name,
             quantity: qi.quantity,
           }))}
+        />
+
+        <StaffingSection
+          eventId={event.id}
+          staff={staff}
+          members={members}
+          defaultCurrency={ctx.org.currency}
+          canManage={canManageEvents}
         />
 
         <section className="rounded-lg border bg-card p-6">

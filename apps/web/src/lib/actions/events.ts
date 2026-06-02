@@ -64,6 +64,111 @@ export async function updateEvent(id: string, formData: FormData) {
   return { ok: true };
 }
 
+// ─── Event staffing ─────────────────────────────────────────────────────────
+// Assign org members to an event with a role label, optional call time, and an
+// hourly rate (entered in dollars, stored as integer cents + currency). Writes
+// are gated to ops+ via the events.manage permission and always stamp org_id.
+
+const staffSchema = z.object({
+  user_id: z.string().uuid().optional().or(z.literal('')),
+  role: z.string().trim().min(1, 'Role is required').max(100),
+  call_time: z.string().optional().or(z.literal('')),
+  release_time: z.string().optional().or(z.literal('')),
+  hourly_rate: z.coerce.number().min(0).optional(),
+});
+
+export async function assignEventStaff(eventId: string, formData: FormData) {
+  const ctx = await requireCurrent();
+  if (!ctx.can('events.manage')) return { error: 'Permission denied.' };
+
+  const parsed = staffSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+
+  const supabase = await createClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, org_id')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!event) return { error: 'Event not found.' };
+
+  const { user_id, role, call_time, release_time, hourly_rate } = parsed.data;
+  const { error } = await supabase.from('event_staff').insert({
+    event_id: eventId,
+    org_id: event.org_id,
+    user_id: user_id ? user_id : null,
+    role: role.trim(),
+    call_time: call_time ? call_time : null,
+    release_time: release_time ? release_time : null,
+    hourly_rate_cents:
+      hourly_rate === undefined || Number.isNaN(hourly_rate)
+        ? null
+        : Math.round(hourly_rate * 100),
+    currency: ctx.org.currency,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/app/events/${eventId}`);
+  return { ok: true };
+}
+
+export async function updateEventStaff(staffId: string, formData: FormData) {
+  const ctx = await requireCurrent();
+  if (!ctx.can('events.manage')) return { error: 'Permission denied.' };
+
+  const parsed = staffSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+
+  const supabase = await createClient();
+
+  const { data: staff } = await supabase
+    .from('event_staff')
+    .select('id, event_id')
+    .eq('id', staffId)
+    .maybeSingle();
+  if (!staff) return { error: 'Staff assignment not found.' };
+
+  const { user_id, role, call_time, release_time, hourly_rate } = parsed.data;
+  const { error } = await supabase
+    .from('event_staff')
+    .update({
+      user_id: user_id ? user_id : null,
+      role: role.trim(),
+      call_time: call_time ? call_time : null,
+      release_time: release_time ? release_time : null,
+      hourly_rate_cents:
+        hourly_rate === undefined || Number.isNaN(hourly_rate)
+          ? null
+          : Math.round(hourly_rate * 100),
+    })
+    .eq('id', staffId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/app/events/${staff.event_id}`);
+  return { ok: true };
+}
+
+export async function removeEventStaff(staffId: string) {
+  const ctx = await requireCurrent();
+  if (!ctx.can('events.manage')) return { error: 'Permission denied.' };
+
+  const supabase = await createClient();
+
+  const { data: staff } = await supabase
+    .from('event_staff')
+    .select('id, event_id')
+    .eq('id', staffId)
+    .maybeSingle();
+  if (!staff) return { error: 'Staff assignment not found.' };
+
+  const { error } = await supabase.from('event_staff').delete().eq('id', staffId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/app/events/${staff.event_id}`);
+  return { ok: true };
+}
+
 /**
  * Delete an event (calendar + dispatch). Clears staff and BEO records via FK
  * cascade (they ref events(id) on delete cascade). Idempotent if the id
