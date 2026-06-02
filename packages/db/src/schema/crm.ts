@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
   integer,
+  bigint,
   boolean,
 } from 'drizzle-orm/pg-core';
 import { orgs, profiles } from './orgs';
@@ -62,6 +63,7 @@ export const contacts = pgTable('contacts', {
   companyId: uuid('company_id').references(() => companies.id, { onDelete: 'set null' }),
   firstName: text('first_name'),
   lastName: text('last_name'),
+  // DB column is `citext` (case-insensitive); represented here as text.
   email: text('email'),
   phone: text('phone'),
   jobTitle: text('job_title'),
@@ -71,6 +73,8 @@ export const contacts = pgTable('contacts', {
   leadScore: integer('lead_score').notNull().default(0),
   doNotEmail: boolean('do_not_email').notNull().default(false),
   doNotCall: boolean('do_not_call').notNull().default(false),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeDefaultPaymentMethodId: text('stripe_default_payment_method_id'),
   customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
   tags: text('tags').array().notNull().default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -114,7 +118,7 @@ export const deals = pgTable('deals', {
   companyId: uuid('company_id').references(() => companies.id, { onDelete: 'set null' }),
   ownerId: uuid('owner_id').references(() => profiles.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
-  amountCents: integer('amount_cents').notNull().default(0),
+  amountCents: bigint('amount_cents', { mode: 'number' }).notNull().default(0),
   currency: text('currency').notNull().default('USD'),
   expectedCloseDate: timestamp('expected_close_date', { withTimezone: true }),
   closedAt: timestamp('closed_at', { withTimezone: true }),

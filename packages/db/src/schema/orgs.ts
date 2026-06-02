@@ -53,6 +53,8 @@ export const profiles = pgTable('profiles', {
   // mirrors auth.users.id (1:1)
   id: uuid('id').primaryKey(),
   fullName: text('full_name'),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
   avatarUrl: text('avatar_url'),
   phone: text('phone'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

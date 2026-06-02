@@ -31,6 +31,17 @@ export const serviceTypeEnum = pgEnum('service_type', [
   'plated',
 ]);
 
+export const dispatchStatusEnum = pgEnum('dispatch_status', [
+  'unassigned',
+  'assigned',
+  'en_route',
+  'arrived',
+  'delivered',
+  'completed',
+]);
+
+export const beoStatusEnum = pgEnum('beo_status', ['draft', 'final']);
+
 export const events = pgTable('events', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id')
@@ -52,6 +63,8 @@ export const events = pgTable('events', {
   venueAddress: text('venue_address'),
   venueNotes: text('venue_notes'),
   notes: text('notes'),
+  dispatchStatus: dispatchStatusEnum('dispatch_status').notNull().default('unassigned'),
+  driverId: uuid('driver_id').references(() => profiles.id, { onDelete: 'set null' }),
   meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -70,6 +83,7 @@ export const eventStaff = pgTable('event_staff', {
   callTime: timestamp('call_time', { withTimezone: true }),
   releaseTime: timestamp('release_time', { withTimezone: true }),
   hourlyRateCents: integer('hourly_rate_cents'),
+  currency: text('currency').notNull().default('USD'),
 });
 
 export const beos = pgTable('beos', {
@@ -81,7 +95,13 @@ export const beos = pgTable('beos', {
     .notNull()
     .references(() => orgs.id, { onDelete: 'cascade' }),
   version: integer('version').notNull().default(1),
+  title: text('title'),
+  status: beoStatusEnum('status').notNull().default('draft'),
+  content: jsonb('content').$type<Record<string, unknown>>().notNull().default({}),
+  notes: text('notes'),
   pdfUrl: text('pdf_url'),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+  finalizedBy: uuid('finalized_by').references(() => profiles.id, { onDelete: 'set null' }),
   generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
   generatedBy: uuid('generated_by').references(() => profiles.id, { onDelete: 'set null' }),
 });

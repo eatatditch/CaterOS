@@ -4,3 +4,5 @@ export * from './menu';
 export * from './quotes';
 export * from './events';
 export * from './billing';
+export * from './team';
+export * from './marketing';

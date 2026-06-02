@@ -8,6 +8,7 @@ import {
   integer,
   boolean,
   jsonb,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { orgs } from './orgs';
 
@@ -94,6 +95,23 @@ export const modifiers = pgTable('modifiers', {
   priceDeltaCents: integer('price_delta_cents').notNull().default(0),
   position: integer('position').notNull().default(0),
 });
+
+// Join table: which modifier groups apply to which menu items.
+export const menuItemModifierGroups = pgTable(
+  'menu_item_modifier_groups',
+  {
+    menuItemId: uuid('menu_item_id')
+      .notNull()
+      .references(() => menuItems.id, { onDelete: 'cascade' }),
+    modifierGroupId: uuid('modifier_group_id')
+      .notNull()
+      .references(() => modifierGroups.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.menuItemId, t.modifierGroupId] }),
+  }),
+);
 
 export const menusRelations = relations(menus, ({ many }) => ({
   categories: many(menuCategories),
