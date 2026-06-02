@@ -593,7 +593,7 @@ export function QuoteBuilder({
             <Field
               label="Deposit ($)"
               htmlFor="deposit"
-              hint="Shown on the quote and charged when the client accepts. Leave at 0 to use the default deposit rate from Billing."
+              hint="Shown on the quote and charged when the client accepts. Leave at 0 to use the default deposit amount from Billing."
             >
               <NumericInput
                 step="0.01"

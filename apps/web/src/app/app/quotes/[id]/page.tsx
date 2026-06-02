@@ -37,8 +37,8 @@ export default async function QuoteDetailPage({
     .eq('id', quote.org_id)
     .maybeSingle();
   const orgSettings = (org?.settings as Record<string, unknown> | null) ?? {};
-  const depositRate =
-    typeof orgSettings.deposit_rate === 'number' ? orgSettings.deposit_rate : 0.25;
+  const orgDepositCents =
+    typeof orgSettings.deposit_cents === 'number' ? orgSettings.deposit_cents : 50_000;
 
   const { data: invoiceForQuote } = await supabase
     .from('invoices')
@@ -88,7 +88,7 @@ export default async function QuoteDetailPage({
               appUrl={appUrl}
               totalCents={Number(quote.total_cents)}
               currency={String(quote.currency)}
-              depositRate={depositRate}
+              orgDepositCents={orgDepositCents}
               invoiceId={invoiceForQuote?.id ?? null}
               invoiceTotalCents={invoiceForQuote?.total_cents ?? null}
               invoiceAmountPaidCents={invoiceForQuote?.amount_paid_cents ?? null}

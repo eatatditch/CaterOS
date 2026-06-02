@@ -6,31 +6,31 @@ import { toast } from 'sonner';
 import { saveBillingSettings } from '@/lib/actions/billing';
 import { Field, inputCls, buttonPrimaryCls } from '@/components/ui/field';
 
-export function DepositRateForm({
-  initial,
+export function DepositAmountForm({
+  initialCents,
   autoChargeEnabled,
   canEdit,
 }: {
-  initial: number;
+  initialCents: number;
   autoChargeEnabled: boolean;
   canEdit: boolean;
 }) {
   const router = useRouter();
-  const [pct, setPct] = useState(() => Math.round(initial * 10000) / 100);
+  const [dollars, setDollars] = useState(() => Math.round(initialCents) / 100);
   const [autoCharge, setAutoCharge] = useState(autoChargeEnabled);
   const [isSaving, startSaving] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function onSave() {
     setError(null);
-    const numeric = Number(pct);
-    if (!isFinite(numeric) || numeric < 0 || numeric > 100) {
-      setError('Enter a percentage between 0 and 100');
+    const numeric = Number(dollars);
+    if (!isFinite(numeric) || numeric < 0) {
+      setError('Enter a deposit amount of $0 or more');
       return;
     }
     startSaving(async () => {
       const res = await saveBillingSettings({
-        deposit_rate: numeric / 100,
+        deposit_cents: Math.round(numeric * 100),
         auto_charge_enabled: autoCharge,
       });
       if (res?.error) {
@@ -45,20 +45,20 @@ export function DepositRateForm({
 
   return (
     <div className="space-y-4">
-      <Field label="Deposit percentage" htmlFor="deposit_rate">
+      <Field label="Default deposit amount" htmlFor="deposit_amount">
         <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">$</span>
           <input
-            id="deposit_rate"
+            id="deposit_amount"
             type="number"
             min="0"
-            max="100"
-            step="0.5"
-            value={pct}
-            onChange={(e) => setPct(Number(e.target.value))}
+            step="any"
+            inputMode="decimal"
+            value={dollars}
+            onChange={(e) => setDollars(Number(e.target.value))}
             disabled={!canEdit}
-            className={`${inputCls} max-w-[140px]`}
+            className={`${inputCls} max-w-[160px]`}
           />
-          <span className="text-sm text-muted-foreground">%</span>
         </div>
       </Field>
 

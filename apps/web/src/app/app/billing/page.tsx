@@ -2,7 +2,9 @@ import { CheckCircle2, CreditCard, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { requireCurrent } from '@/lib/auth/current';
 import { PageHeader } from '@/components/ui/page-header';
-import { DepositRateForm } from './deposit-rate-form';
+import { DepositAmountForm } from './deposit-amount-form';
+
+const DEFAULT_DEPOSIT_CENTS = 50_000; // $500
 
 export const dynamic = 'force-dynamic';
 
@@ -17,8 +19,10 @@ export default async function BillingPage() {
     .maybeSingle();
 
   const settings = (org?.settings as Record<string, unknown> | null) ?? {};
-  const depositRate =
-    typeof settings.deposit_rate === 'number' ? settings.deposit_rate : 0.25;
+  const depositCents =
+    typeof settings.deposit_cents === 'number'
+      ? settings.deposit_cents
+      : DEFAULT_DEPOSIT_CENTS;
   const autoChargeEnabled =
     typeof settings.auto_charge_enabled === 'boolean' ? settings.auto_charge_enabled : true;
 
@@ -75,15 +79,16 @@ export default async function BillingPage() {
           )}
         </section>
 
-        {/* Deposit rate */}
+        {/* Deposit amount */}
         <section className="rounded-lg border bg-card p-6">
           <h2 className="mb-2 font-semibold">Default deposit</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Percentage of the quote total charged as a deposit when the client accepts.
-            Applied to every future accepted quote — existing invoices aren&apos;t affected.
+            Flat dollar amount charged as a deposit when a client accepts a quote.
+            A per-quote deposit set in the quote builder overrides this. The deposit is
+            capped at the quote total, and existing invoices aren&apos;t affected.
           </p>
-          <DepositRateForm
-            initial={depositRate}
+          <DepositAmountForm
+            initialCents={depositCents}
             autoChargeEnabled={autoChargeEnabled}
             canEdit={canEdit}
           />

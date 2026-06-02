@@ -29,7 +29,7 @@ export function QuoteActions({
   appUrl,
   totalCents,
   currency,
-  depositRate,
+  orgDepositCents,
   invoiceId,
   invoiceTotalCents,
   invoiceAmountPaidCents,
@@ -43,7 +43,7 @@ export function QuoteActions({
   appUrl: string;
   totalCents: number;
   currency: string;
-  depositRate: number;
+  orgDepositCents: number;
   invoiceId: string | null;
   invoiceTotalCents: number | null;
   invoiceAmountPaidCents: number | null;
@@ -66,7 +66,7 @@ export function QuoteActions({
   const suggestedDepositCents =
     remainingFromInvoice !== null
       ? remainingFromInvoice
-      : Math.round(totalCents * depositRate);
+      : Math.min(orgDepositCents, totalCents);
 
   function transition(next: 'sent' | 'accepted' | 'declined' | 'draft') {
     startTransition(async () => {

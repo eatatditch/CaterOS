@@ -7,7 +7,9 @@ import { requireCurrent } from '@/lib/auth/current';
 import { MANUAL_PAYMENT_METHODS } from '@/lib/billing/payment-methods';
 
 const schema = z.object({
-  deposit_rate: z.number().min(0).max(1).optional(),
+  // Flat default deposit in integer cents (e.g. 50000 = $500). Replaces the
+  // old percentage rate. The per-quote deposit override still wins when set.
+  deposit_cents: z.number().int().min(0).max(100_000_000).optional(),
   auto_charge_enabled: z.boolean().optional(),
 });
 
@@ -63,7 +65,7 @@ export async function saveBillingSettings(input: z.infer<typeof schema>) {
     .maybeSingle();
   const current = (org?.settings as Record<string, unknown> | null) ?? {};
   const next: Record<string, unknown> = { ...current };
-  if (parsed.data.deposit_rate !== undefined) next.deposit_rate = parsed.data.deposit_rate;
+  if (parsed.data.deposit_cents !== undefined) next.deposit_cents = parsed.data.deposit_cents;
   if (parsed.data.auto_charge_enabled !== undefined)
     next.auto_charge_enabled = parsed.data.auto_charge_enabled;
 
@@ -72,11 +74,6 @@ export async function saveBillingSettings(input: z.infer<typeof schema>) {
 
   revalidatePath('/app/billing');
   return { ok: true };
-}
-
-// Kept for backwards-compat with the existing UI
-export async function saveDepositRate(input: { deposit_rate: number }) {
-  return saveBillingSettings({ deposit_rate: input.deposit_rate });
 }
 
 export async function recordManualPayment(input: z.infer<typeof manualPaymentSchema>) {

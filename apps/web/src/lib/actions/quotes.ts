@@ -100,8 +100,8 @@ export async function createQuote(input: z.infer<typeof createSchema>) {
       gratuity_cents: totals.gratuityCents,
       discount_cents: totals.discountCents,
       total_cents: totals.totalCents,
-      // Per-quote deposit (cents). 0 → fall back to the org deposit rate at
-      // acceptance. Capped at the total so it can never exceed what's owed.
+      // Per-quote deposit (cents). 0 → fall back to the flat org default
+      // deposit at acceptance. Capped at the total so it can't exceed what's owed.
       deposit_cents: Math.min(parsed.data.deposit_cents, totals.totalCents),
       currency: ctx.org.currency,
       public_token: randomToken(),
@@ -201,8 +201,8 @@ export async function updateQuote(id: string, input: z.infer<typeof updateSchema
       gratuity_cents: totals.gratuityCents,
       discount_cents: totals.discountCents,
       total_cents: totals.totalCents,
-      // Per-quote deposit (cents). 0 → fall back to the org rate at acceptance.
-      // Capped at the total so it can never exceed what's owed.
+      // Per-quote deposit (cents). 0 → fall back to the flat org default at
+      // acceptance. Capped at the total so it can never exceed what's owed.
       deposit_cents: Math.min(parsed.data.deposit_cents, totals.totalCents),
       meta: {
         ...existingMeta,
@@ -247,20 +247,29 @@ export async function updateQuote(id: string, input: z.infer<typeof updateSchema
   if (admin) {
     const { data: invoice } = await admin
       .from('invoices')
-      .select('id, amount_paid_cents, meta')
+      .select('id, amount_paid_cents, status')
       .eq('quote_id', id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (invoice) {
-      const invMeta = (invoice.meta ?? {}) as Record<string, unknown>;
-      const depositRate =
-        typeof invMeta.deposit_rate === 'number' ? (invMeta.deposit_rate as number) : 0.25;
-      // Per-quote deposit wins (capped at total); otherwise derive from the rate.
+    // Never resurrect a finalized invoice: editing a quote whose invoice was
+    // voided/refunded must not flip it back to open/paid.
+    if (invoice && invoice.status !== 'void' && invoice.status !== 'refunded') {
+      // Flat org default deposit (cents), $500 when unset.
+      const { data: orgRow } = await admin
+        .from('orgs')
+        .select('settings')
+        .eq('id', existing.org_id)
+        .maybeSingle();
+      const orgSettings = (orgRow?.settings as Record<string, unknown> | null) ?? {};
+      const defaultDepositCents =
+        typeof orgSettings.deposit_cents === 'number' ? orgSettings.deposit_cents : 50000;
+      // Per-quote deposit wins (capped at total); otherwise the flat org default,
+      // also capped at the total so it never exceeds what's owed.
       const newDeposit =
         parsed.data.deposit_cents > 0
           ? Math.min(parsed.data.deposit_cents, totals.totalCents)
-          : Math.round(totals.totalCents * depositRate);
+          : Math.min(defaultDepositCents, totals.totalCents);
       const paid = Number(invoice.amount_paid_cents ?? 0);
       const newStatus =
         paid >= totals.totalCents
