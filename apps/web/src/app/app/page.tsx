@@ -51,7 +51,7 @@ export default async function DashboardPage() {
       .from('quotes')
       .select('total_cents')
       .in('status', ['accepted', 'converted'])
-      .gte('created_at', startOfMonth.toISOString()),
+      .gte('accepted_at', startOfMonth.toISOString()),
     supabase
       .from('events')
       .select('id, name, status, starts_at, headcount, venue_name')
