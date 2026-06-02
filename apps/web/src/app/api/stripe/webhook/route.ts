@@ -32,6 +32,23 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
+  // Event-level idempotency: record the event id before processing. If the
+  // insert hits the primary-key conflict the event was already received
+  // (Stripe redelivery), so we ack with 200 and skip reprocessing.
+  const { data: inserted, error: dedupeErr } = await admin
+    .from('stripe_events')
+    .upsert({ event_id: event.id, type: event.type }, { onConflict: 'event_id', ignoreDuplicates: true })
+    .select('event_id');
+  if (dedupeErr) {
+    console.error('[stripe webhook] dedupe insert failed:', dedupeErr);
+    // Fail open to Stripe (return 500) so it retries rather than silently dropping.
+    return NextResponse.json({ error: 'dedupe_failed' }, { status: 500 });
+  }
+  if (!inserted || inserted.length === 0) {
+    // Already processed this event id — ack without reprocessing.
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -102,10 +119,12 @@ export async function POST(request: NextRequest) {
             ? charge.payment_intent
             : charge.payment_intent?.id;
         if (!pi) break;
+        // Idempotent under redelivery: only flip rows not already refunded.
         await admin
           .from('payments')
           .update({ status: 'refunded' })
-          .eq('stripe_payment_intent_id', pi);
+          .eq('stripe_payment_intent_id', pi)
+          .neq('status', 'refunded');
         break;
       }
 

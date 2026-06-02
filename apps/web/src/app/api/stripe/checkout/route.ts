@@ -110,6 +110,12 @@ export async function POST(request: NextRequest) {
         },
         description: `Deposit for ${invoice.number}`,
       },
+    },
+    {
+      // Idempotency key keyed by the invoice token: repeated POSTs (double
+      // clicks, retries) return the same Checkout Session instead of
+      // creating duplicate orphaned sessions.
+      idempotencyKey: `checkout-${body.invoice_token}`,
     });
 
     // Persist the session id so we can find it later if needed

@@ -98,7 +98,7 @@ export default async function InvoicesPage() {
           <EmptyState
             icon={Receipt}
             title="No invoices yet"
-            description="Convert an accepted quote into an invoice to start collecting payments. Stripe integration coming in Phase 5."
+            description="Invoices appear here when a quote is accepted. Collect via Stripe Checkout or record manual payments — both are live."
           />
         }
       />

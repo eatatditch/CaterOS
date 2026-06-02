@@ -1,5 +1,6 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -9,12 +10,9 @@ import { getConnectionForOrg, sendEmail } from '@/lib/gmail/client';
 
 const roleEnum = z.enum(['owner', 'manager', 'sales', 'ops', 'driver', 'read_only']);
 
+// Cryptographically secure, URL-safe token (64 hex chars).
 function randToken() {
-  return (
-    Math.random().toString(36).slice(2) +
-    Math.random().toString(36).slice(2) +
-    Date.now().toString(36)
-  );
+  return randomBytes(32).toString('hex');
 }
 
 function managerGate(role: string) {
@@ -194,7 +192,11 @@ export async function revokeInvitation(id: string) {
   const gate = managerGate(ctx.role);
   if (gate) return { error: gate };
   const supabase = await createClient();
-  const { error } = await supabase.from('invitations').delete().eq('id', id);
+  const { error } = await supabase
+    .from('invitations')
+    .delete()
+    .eq('id', id)
+    .eq('org_id', ctx.org.id);
   if (error) return { error: error.message };
   revalidatePath('/app/settings/team');
   return { ok: true };

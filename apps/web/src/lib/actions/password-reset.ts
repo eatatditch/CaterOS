@@ -1,17 +1,15 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getConnectionForOrg, sendEmail } from '@/lib/gmail/client';
 
+// Cryptographically secure, URL-safe token (64 hex chars).
 function randToken() {
-  return (
-    Math.random().toString(36).slice(2) +
-    Math.random().toString(36).slice(2) +
-    Date.now().toString(36)
-  );
+  return randomBytes(32).toString('hex');
 }
 
 function appBaseUrl() {
