@@ -14,7 +14,13 @@ import {
 
 const units = ['person', 'each', 'dozen', 'tray', 'gallon', 'pound'];
 
-export function NewMenuItemForm({ menuId }: { menuId: string }) {
+export function NewMenuItemForm({
+  menuId,
+  categories,
+}: {
+  menuId: string;
+  categories: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -43,6 +49,18 @@ export function NewMenuItemForm({ menuId }: { menuId: string }) {
       <Field label="Description" htmlFor="description">
         <textarea id="description" name="description" className={textareaCls} />
       </Field>
+      {categories.length > 0 ? (
+        <Field label="Category" htmlFor="category_id">
+          <select id="category_id" name="category_id" className={selectCls} defaultValue="">
+            <option value="">Uncategorized</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Price ($)" htmlFor="price">
           <input
