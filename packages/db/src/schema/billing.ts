@@ -79,6 +79,10 @@ export const payments = pgTable('payments', {
   // References auth.users(id) in the DB (manual payments record the operator).
   recordedBy: uuid('recorded_by'),
   receivedAt: timestamp('received_at', { withTimezone: true }),
+  // Set when an off-Stripe payment is reversed (voided) from the ledger.
+  voidedAt: timestamp('voided_at', { withTimezone: true }),
+  voidedBy: uuid('voided_by'), // references auth.users(id) in the DB
+  voidReason: text('void_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

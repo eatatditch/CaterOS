@@ -31,6 +31,11 @@ const quoteManualPaymentSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+const voidPaymentSchema = z.object({
+  payment_id: z.string().uuid(),
+  reason: z.string().max(500).optional(),
+});
+
 const PAYMENT_ERROR_MESSAGES: Record<string, string> = {
   amount_must_be_positive: 'Amount must be greater than zero.',
   invalid_method: 'Choose a valid payment method.',
@@ -42,6 +47,11 @@ const PAYMENT_ERROR_MESSAGES: Record<string, string> = {
   quote_not_found: 'Quote not found.',
   quote_not_acceptable: 'This quote is declined or expired — can’t take a deposit.',
   quote_missing_public_token: 'Quote is missing its public link. Re-save it and try again.',
+  payment_not_found: 'Payment not found.',
+  payment_already_voided: 'This payment is already voided.',
+  payment_not_voidable: 'This payment can’t be voided.',
+  stripe_payment_use_refund:
+    'This was paid by card via Stripe — refund it in Stripe instead of voiding.',
 };
 
 function mapPaymentError(message: string): string {
@@ -74,6 +84,33 @@ export async function saveBillingSettings(input: z.infer<typeof schema>) {
 
   revalidatePath('/app/billing');
   return { ok: true };
+}
+
+export async function voidPayment(input: z.infer<typeof voidPaymentSchema>) {
+  const ctx = await requireCurrent();
+  if (ctx.role !== 'owner' && ctx.role !== 'manager') {
+    return { error: 'Only owners and managers can void payments.' };
+  }
+  const parsed = voidPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('void_payment', {
+    p_payment_id: parsed.data.payment_id,
+    p_reason: parsed.data.reason ?? null,
+  });
+  if (error) {
+    return { error: mapPaymentError(error.message) };
+  }
+
+  const result = data as { ok: boolean; invoice_id: string | null } | null;
+  revalidatePath('/app/invoices');
+  if (result?.invoice_id) {
+    revalidatePath(`/app/invoices/${result.invoice_id}`);
+  }
+  return { ok: true, data: result };
 }
 
 export async function recordManualPayment(input: z.infer<typeof manualPaymentSchema>) {

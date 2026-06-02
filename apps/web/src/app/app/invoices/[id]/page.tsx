@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { StatusBadge, invoiceStatusTone } from '@/components/ui/status-badge';
 import { formatDate } from '@/lib/utils';
 import { RecordPaymentForm } from './record-payment-form';
+import { VoidPaymentButton } from './void-payment-button';
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'Cash',
@@ -29,6 +30,7 @@ type Payment = {
   received_at: string | null;
   created_at: string;
   stripe_payment_intent_id: string | null;
+  voided_at: string | null;
 };
 
 export default async function InvoiceDetailPage({
@@ -52,7 +54,7 @@ export default async function InvoiceDetailPage({
   const { data: paymentsData } = await supabase
     .from('payments')
     .select(
-      'id, amount_cents, currency, method, reference, note, status, received_at, created_at, stripe_payment_intent_id',
+      'id, amount_cents, currency, method, reference, note, status, received_at, created_at, stripe_payment_intent_id, voided_at',
     )
     .eq('invoice_id', id)
     .order('received_at', { ascending: false, nullsFirst: false });
@@ -73,6 +75,10 @@ export default async function InvoiceDetailPage({
     0,
   );
   const canRecord = ctx.role === 'owner' || ctx.role === 'manager';
+  // Off-Stripe payments can be voided (reversed) by managers while the invoice
+  // is still live. Stripe charges must be refunded in Stripe, so they're not.
+  const canVoidOnInvoice =
+    canRecord && invoice.status !== 'void' && invoice.status !== 'refunded';
 
   return (
     <div className="container max-w-4xl py-8">
@@ -171,6 +177,7 @@ export default async function InvoiceDetailPage({
                     <th className="py-2 pr-4 font-medium">Reference</th>
                     <th className="py-2 pr-4 font-medium">Note</th>
                     <th className="py-2 pr-4 text-right font-medium">Amount</th>
+                    <th className="py-2 text-right font-medium" />
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -179,18 +186,40 @@ export default async function InvoiceDetailPage({
                       ? `${METHOD_LABELS[p.method ?? 'card'] ?? p.method ?? 'Card'} · Stripe`
                       : (METHOD_LABELS[p.method ?? ''] ?? p.method ?? '—');
                     const date = p.received_at ?? p.created_at;
+                    const isVoided = Boolean(p.voided_at);
+                    // Manager + live invoice + a recorded (non-Stripe) payment
+                    // that hasn't been voided yet.
+                    const canVoid =
+                      canVoidOnInvoice &&
+                      !isVoided &&
+                      p.status === 'succeeded' &&
+                      !p.stripe_payment_intent_id;
                     return (
-                      <tr key={p.id}>
+                      <tr key={p.id} className={isVoided ? 'text-muted-foreground' : ''}>
                         <td className="py-2 pr-4">{formatDate(date)}</td>
-                        <td className="py-2 pr-4">{methodLabel}</td>
+                        <td className="py-2 pr-4">
+                          {methodLabel}
+                          {isVoided ? (
+                            <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+                              Voided
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="py-2 pr-4 text-muted-foreground">
                           {p.reference ?? '—'}
                         </td>
                         <td className="py-2 pr-4 text-muted-foreground">
                           {p.note ?? '—'}
                         </td>
-                        <td className="py-2 pr-4 text-right tabular-nums font-medium">
+                        <td
+                          className={`py-2 pr-4 text-right tabular-nums font-medium ${
+                            isVoided ? 'line-through' : ''
+                          }`}
+                        >
                           {formatMoney(p.amount_cents, p.currency)}
+                        </td>
+                        <td className="py-2 text-right">
+                          {canVoid ? <VoidPaymentButton paymentId={p.id} /> : null}
                         </td>
                       </tr>
                     );
